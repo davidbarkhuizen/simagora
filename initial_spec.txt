@@ -1,0 +1,19 @@
+ARACHNAGORA
+market simulator / back-tester
+(C) 2010 david barkhuizen
+---
+
+price resolution = daily OHLCV
+triggers to be evaluated after close of day
+=> orders submitted to broker for execution the following day
+realistic execution - broker executes order at some price between daily high and low
+
+3 agents
+1. trader
+2. broker - receives orders from trader, determines execution price, maintains trader's account
+3. dataprovider - market data provider
+
+---
+
+REFERENCE PRICE CALC
+

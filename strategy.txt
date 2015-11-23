@@ -1,0 +1,23 @@
+
+
+on an ongoing basis,
+need to compare actual strategy to model to see deviation
+
+motivation:
+
+on a losing streak of say 6 months, stop
+but continue to watch model, and then when model starts making money again, 
+put strategy back into action
+
+
+
+
+
+
+
+
+
+
+
+
+
