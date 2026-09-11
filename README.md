@@ -10,7 +10,8 @@ resulting orders to a simulated broker for execution the following day. Executio
 "realistic" in that the broker fills orders at a price between the day's high and low
 rather than at an exact known price.
 
-Per `initial_spec.txt`, the design has 3 conceptual agents:
+Per the project's original design notes (see History below), the design has 3
+conceptual agents:
 
 1. **Trader** — runs a strategy and owns an account.
 2. **Broker** — receives orders from the trader, determines execution price, and
@@ -85,14 +86,24 @@ to be run from the repo root.
 - `timer.py` — a small perf-timing helper; its one class is entirely commented out,
   so today this module only re-exports `time.perf_counter` as `clock`.
 
-## Notes and design docs
+## History
 
-- `initial_spec.txt` — original design spec for reference price calculation and the
-  3-agent architecture.
-- `strategy.txt` — notes on an unimplemented idea: continuously compare a live
-  strategy's performance to a model, pause trading during a losing streak, and resume
-  once the model starts making money again.
-- `user_notes.txt` — currently empty.
+This project was originally called **ARACHNAGORA**, a market simulator /
+back-tester, (C) 2010 david barkhuizen. What follows was folded in from
+separate design-note `.txt` files that used to sit at the repo root
+(`initial_spec.txt`, `strategy.txt`, `user_notes.txt` — removed now that
+their content lives here, so it isn't duplicated in two places).
+
+- **Original design spec.** Daily OHLCV price resolution; triggers evaluated
+  after the day's close, with resulting orders submitted for execution the
+  *following* day; realistic execution — the broker fills at some price
+  between the day's high and low. All still true today — see Overview above.
+  The original spec also had an empty "REFERENCE PRICE CALC" heading with no
+  content ever written under it.
+- **Strategy-vs-model deviation (unimplemented idea).** On an ongoing basis,
+  compare the actual strategy's performance to a model, to see the deviation
+  between the two.
+- `user_notes.txt` was always empty — nothing to carry over.
 
 ## Position closing
 
