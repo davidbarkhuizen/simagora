@@ -77,13 +77,14 @@ class Broker(object):
         margin = (order.stop_loss - exec_price) * leverage
       
       trader = self.traders[order.trader_id]
-      
-      # check margin requirement against trader's cash ac            
-      d = margin - trader.ac.cash_bal     
-      
-      if (margin > trader.ac.cash_bal):
-        receipt = OrderReceipt(order, 'insufficient_cash_bal', 0, date, 0)    
-      else:        
+
+      if (margin <= 0):
+        # exec_price has already gapped past the order's own stop_loss
+        # level - the position would open already beyond its stop
+        receipt = OrderReceipt(order, 'gapped_through_stop_loss', 0, date, 0)
+      elif (margin > trader.ac.cash_bal):
+        receipt = OrderReceipt(order, 'insufficient_cash_bal', 0, date, 0)
+      else:
         # sequester margin amount from client cash account
         trader.ac.margin_bal += margin
         trader.ac.cash_bal -= margin        
