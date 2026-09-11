@@ -1,6 +1,6 @@
-# ARACHNAGORA (simagora)
+# simagora
 
-A Python 2 market/equity backtesting simulator, originally written in 2010 by david barkhuizen.
+Financial instrument backtesting simulator.
 
 ## Overview
 
