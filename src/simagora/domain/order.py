@@ -24,7 +24,7 @@ class Order(HasAutoId):
     
     self.ins = ins
     self.buysell = buysell
-    self.quantity = quantity      
+    self.quantity = Decimal(quantity)
     
     self.stop_loss = stop_loss
     self.take_profit = take_profit
