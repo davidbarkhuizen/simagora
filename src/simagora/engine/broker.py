@@ -65,17 +65,25 @@ class Broker(object):
     
     for order in orders_to_open:
 
+      trader = self.traders[order.trader_id]
+
       # calc exec price
-      exec_price = self.calc_execution_price(order.ins, order.buysell, date)      
-      
+      exec_price = self.calc_execution_price(order.ins, order.buysell, date)
+
+      if (exec_price is None):
+        # order.ins has no data for date - only reachable with a
+        # multi-instrument Universe whose instruments don't all share
+        # the same trading calendar
+        receipt = OrderReceipt(order, 'instrument_not_trading', 0, date, 0)
+        self.receiptQ.put(receipt)
+        continue
+
       # calculate margin req - scales with the order's own quantity/leverage
       margin = None
       if (order.buysell == 'buy'):
         margin = (exec_price - order.stop_loss) * order.quantity * order.leverage
       else: # sell
         margin = (order.stop_loss - exec_price) * order.quantity * order.leverage
-      
-      trader = self.traders[order.trader_id]
 
       if (margin <= 0):
         # exec_price has already gapped past the order's own stop_loss
@@ -115,17 +123,22 @@ class Broker(object):
     while ((idx >= 0) and (len(self.open_positions) > 0)):        
       pos = self.open_positions[idx]
       ins = pos.order_receipt.order.ins
-      pdata = self.datafeed.get_price_info(ins, date)      
-      
-      # check that we would not have hit take-profit or stop-loss levels during the day
+      pdata = self.datafeed.get_price_info(ins, date)
+
       pos_closed = False
-      if (self.profit_taken_on_position(date, pos, pdata) == True):
-        pos_closed = True
-      elif (self.loss_taken_on_position(date, pos, pdata) == True):
-        pos_closed = True
-      elif (self.position_expired(pos, pdata, date) == True):
-        pos_closed = True
-        
+      if (pdata is not None):
+        # check that we would not have hit take-profit or stop-loss levels during the day
+        # (pdata is None - ins has no data for date - only reachable
+        # with a multi-instrument Universe whose instruments don't all
+        # share the same trading calendar; leave the position alone
+        # today rather than crash on a missing high/low/close)
+        if (self.profit_taken_on_position(date, pos, pdata) == True):
+          pos_closed = True
+        elif (self.loss_taken_on_position(date, pos, pdata) == True):
+          pos_closed = True
+        elif (self.position_expired(pos, pdata, date) == True):
+          pos_closed = True
+
       if (pos_closed == True):
         pos = self.open_positions.pop(idx)
         self.closed_positions.append(pos)
@@ -221,6 +234,12 @@ class Broker(object):
         order = pos.order_receipt.order
         exec_price = self.calc_execution_price(order.ins, order.buysell, date)
 
+        if (exec_price is None):
+          # order.ins has no data for date - see execute_orders_to_open
+          receipt = OrderReceipt(close_order, 'instrument_not_trading', 0, date, 0)
+          self.receiptQ.put(receipt)
+          continue
+
         trader = self.traders[order.trader_id]
         trader.ac.close_at_price(date, pos, exec_price, order.buysell)
 
@@ -250,8 +269,11 @@ class Broker(object):
   def calc_execution_price(self, ins, buysell, date):
     '''
     price = (pdata['high'] + pdata['low']) / Decimal(2)
+    None if ins has no data for date
     '''
     pdata = self.datafeed.get_price_info(ins, date)
+    if (pdata is None):
+      return None
     # average of day high and low
     price = (pdata['high'] + pdata['low']) / Decimal(2)
     return price

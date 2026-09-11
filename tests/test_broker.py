@@ -148,5 +148,57 @@ class TestPositionExpired(unittest.TestCase):
     self.assertEqual(len(self.broker.closed_positions), 0)
 
 
+class TestInstrumentNotTradingGuards(unittest.TestCase):
+  '''
+  only reachable with a multi-instrument Universe whose instruments
+  don't all share the same trading calendar - simulated here with a
+  FakeDataFeed that simply has no entry for DAY2, standing in for "the
+  broker's datafeed has no data for this instrument today"
+  '''
+
+  def setUp(self):
+    # DAY1 only - no DAY2 entry at all
+    self.datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q,
+     self.broker, self.trader) = make_broker_and_trader(
+        self.datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+
+  def test_execute_orders_to_open_rejects_instead_of_crashing(self):
+    order = Order('s&p500', 'buy', 1, Decimal('90'), Decimal('110'), DAY1)
+    self.trader.submit_order(order)
+
+    count = self.broker.execute_orders_to_open(DAY2)
+
+    self.assertEqual(count, 1)
+    self.assertEqual(len(self.broker.open_positions), 0)
+    self.assertEqual(self.trader.ac.cash_bal, Decimal('10000'))
+    self.assertEqual(self.trader.ac.margin_bal, Decimal('0'))
+
+    receipt = self.receiptQ.get()
+    self.assertEqual(receipt.status, 'instrument_not_trading')
+
+  def test_manage_open_positions_leaves_the_position_alone_instead_of_crashing(self):
+    pos = open_position(self.trader, self.broker, DAY1)
+
+    self.broker.manage_open_positions(DAY2)  # must not raise
+
+    self.assertIn(pos, self.broker.open_positions)
+    self.assertEqual(len(self.broker.closed_positions), 0)
+
+  def test_execute_orders_to_close_rejects_instead_of_crashing(self):
+    pos = open_position(self.trader, self.broker, DAY1)
+    close_order = CloseOrder(pos.id, DAY2)
+    self.trader.submit_order(close_order)
+
+    count = self.broker.execute_orders_to_close(DAY2)
+
+    self.assertEqual(count, 1)
+    self.assertIn(pos, self.broker.open_positions)
+
+    receipts = self.receiptQ.extract_matching(lambda r: r.order is close_order)
+    self.assertEqual(len(receipts), 1)
+    self.assertEqual(receipts[0].status, 'instrument_not_trading')
+
+
 if __name__ == '__main__':
   unittest.main()
