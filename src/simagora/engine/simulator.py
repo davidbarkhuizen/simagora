@@ -64,10 +64,11 @@ class Simulator(object):
       # PROCESS TRADING DAYS
       if (self.datafeed.date_is_trading_day(current_date) == True):        
 
-        self.broker.open_manage_and_close(current_date)                
-        
+        self.broker.open_manage_and_close(current_date)
+
         # book keeping
         for trader in self.traders:
+          trader.process_receipts()
           trader.ac.tally_individual_open_positions(current_date)
           trader.ac.record_net_end_of_day_pos(current_date)
           trader.ac.record_end_of_day_balances(current_date)            
