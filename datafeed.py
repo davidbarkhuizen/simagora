@@ -1,10 +1,17 @@
 from csvhandler import *
 import logging
+import os
+
+DEFAULT_DATA_ROOT = os.environ.get(
+  'SIMAGORA_DATA_ROOT',
+  os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'csv')
+)
 
 class DataFeed(object):
-  
-  def __init__(self, instrument):
+
+  def __init__(self, instrument, data_root=None):
     self.feed = None
+    self.data_root = data_root if (data_root is not None) else DEFAULT_DATA_ROOT
     self.subscribe_to_price_feed_for_instrument(instrument)
   
   def n_day_moving_avg(self, instrument, date, price, n):
@@ -43,9 +50,8 @@ class DataFeed(object):
        return i
     return None
   
-  def subscribe_to_price_feed_for_instrument(self, instrument):    
-    root = '/home/david/pycode/mp/data/csv/'
-    file_name = root + instrument + '.csv'
+  def subscribe_to_price_feed_for_instrument(self, instrument):
+    file_name = os.path.join(self.data_root, instrument + '.csv')
     
     logging.info('creating data feed for')
     logging.info(file_name)
