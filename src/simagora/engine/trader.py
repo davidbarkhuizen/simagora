@@ -1,14 +1,10 @@
 from .strategy import Strategy
+from ..domain.autoid import HasAutoId
 
-class Trader(object):
+class Trader(HasAutoId):
   '''
   '''
-  last_id = -1  
-  @classmethod
-  def new_id(cls):
-    cls.last_id = cls.last_id + 1
-    return cls.last_id
-  
+
   def __init__(self, datafeed, broker, opening_bal, instrument, strategy, start_date, end_date):
     '''
     '''    

@@ -1,14 +1,11 @@
 import logging
 
-class OrderReceipt(object):
+from .autoid import HasAutoId
+
+class OrderReceipt(HasAutoId):
   '''
-  '''    
-  last_id = -1  
-  @classmethod
-  def new_id(cls):
-    cls.last_id = cls.last_id + 1
-    return cls.last_id
-    
+  '''
+
   def __init__(self, order, status, execution_price, execution_date, margin):
     '''
     '''
