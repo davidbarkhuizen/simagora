@@ -151,6 +151,13 @@ class Broker(object):
     take profit on account
     '''
     order = pos.order_receipt.order
+
+    if (order.take_profit is None):
+      # no fixed target (e.g. a trend-following position) - never
+      # auto-closes on profit, only on stop-loss, expiry, or an
+      # explicit close
+      return False
+
     rising_triggers = (order.buysell == 'buy')
 
     if self._level_hit(pdata, order.take_profit, rising_triggers):

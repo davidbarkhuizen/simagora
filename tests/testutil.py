@@ -29,11 +29,37 @@ class FakeDataFeed(object):
     return self.price_info_by_date[d][field]
 
   def n_day_moving_avg(self, instrument, d, field, n):
+    values = self._trailing_values(d, field, n, include_current=True)
+    if (len(values) == 0):
+      return None
+    return sum(values) / Decimal(len(values))
+
+  def n_day_high(self, instrument, d, field, n):
+    values = self._trailing_values(d, field, n, include_current=False)
+    if (len(values) == 0):
+      return None
+    return max(values)
+
+  def n_day_low(self, instrument, d, field, n):
+    values = self._trailing_values(d, field, n, include_current=False)
+    if (len(values) == 0):
+      return None
+    return min(values)
+
+  def n_day_std_dev(self, instrument, d, field, n):
+    values = self._trailing_values(d, field, n, include_current=True)
+    if (len(values) == 0):
+      return None
+    mean = sum(values) / Decimal(len(values))
+    variance = sum((v - mean) ** 2 for v in values) / Decimal(len(values))
+    return variance.sqrt()
+
+  def _trailing_values(self, d, field, n, include_current):
     dates = sorted(self.price_info_by_date.keys())
     idx = dates.index(d)
-    window = dates[max(0, idx - n + 1): idx + 1]
-    values = [self.price_info_by_date[dd][field] for dd in window]
-    return sum(values) / Decimal(len(values))
+    end = idx + 1 if include_current else idx
+    window = dates[max(0, end - n): end]
+    return [self.price_info_by_date[dd][field] for dd in window]
 
 
 def make_broker(datafeed=None):
@@ -46,10 +72,10 @@ def make_broker(datafeed=None):
   return orderQ, receiptQ, term_req_Q, term_notice_Q, broker
 
 
-def make_broker_and_trader(datafeed, opening_bal, instrument, start_date, end_date):
+def make_broker_and_trader(datafeed, opening_bal, instrument, start_date, end_date, strategy_name=None):
   '''as make_broker(), plus a Trader registered with the broker; returns (..., broker, trader)'''
   orderQ, receiptQ, term_req_Q, term_notice_Q, broker = make_broker(datafeed)
-  trader = Trader(datafeed, broker, opening_bal, instrument, None, start_date, end_date)
+  trader = Trader(datafeed, broker, opening_bal, instrument, strategy_name, start_date, end_date)
   return orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader
 
 
