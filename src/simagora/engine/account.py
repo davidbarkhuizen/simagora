@@ -3,6 +3,18 @@ from ..domain.autoid import HasAutoId
 from decimal import Decimal
 import logging
 
+def _signed_pdelta(buysell, reference_price, other_price):
+  '''
+  price movement in the position's favor, from reference_price to
+  other_price: positive when a 'buy' benefits from other_price being
+  higher, or a 'sell' benefits from it being lower. Zero at no
+  movement, negative when it moved against the position.
+  '''
+  if (buysell == 'buy'):
+    return other_price - reference_price
+  else:
+    return reference_price - other_price
+
 class Account(HasAutoId):
   '''
   '''
@@ -29,11 +41,8 @@ class Account(HasAutoId):
     order = pos.order_receipt.order
     receipt = pos.order_receipt
 
-    if (buysell == 'buy'):
-      pdelta = order.take_profit - receipt.execution_price
-    if (buysell == 'sell'):
-      pdelta = receipt.execution_price - order.take_profit      
-      
+    pdelta = _signed_pdelta(buysell, receipt.execution_price, order.take_profit)
+
     # free margin
     self.margin_bal -= margin
     self.cash_bal += margin
@@ -80,10 +89,7 @@ class Account(HasAutoId):
     order = pos.order_receipt.order
     receipt = pos.order_receipt
 
-    if (buysell == 'buy'):
-      pdelta = price - receipt.execution_price
-    else: # sell
-      pdelta = receipt.execution_price - price
+    pdelta = _signed_pdelta(buysell, receipt.execution_price, price)
 
     # free margin
     self.margin_bal -= margin
@@ -108,19 +114,10 @@ class Account(HasAutoId):
     order = pos.order_receipt.order
     receipt = pos.order_receipt
 
-    pdelta = abs(receipt.execution_price - pdata['close'])
-    
-    if (buysell == 'buy'):
-      if (receipt.execution_price <= pdata['close']):
-        in_the_money = True
-      else:
-        in_the_money = False
-    else:
-      if (receipt.execution_price >= pdata['close']):
-        in_the_money = True
-      else:
-        in_the_money = False            
-      
+    signed_pdelta = _signed_pdelta(buysell, receipt.execution_price, pdata['close'])
+    in_the_money = (signed_pdelta >= 0)
+    pdelta = abs(signed_pdelta)
+
     reason = None
       
     if (in_the_money == True):      
@@ -176,23 +173,12 @@ class Account(HasAutoId):
       receipt = pos.order_receipt    
       
       pdata = self.broker.datafeed.get_price_info(order.ins, date)
-      
-      pdelta = receipt.execution_price - pdata['close']
-      if (pdelta < 0):
-        pdelta = (- pdelta)
-      
-      if (order.buysell == 'buy'):
-        if (receipt.execution_price <= pdata['close']):
-          in_the_money = True
-        else:
-          in_the_money = False
-      else:
-        if (receipt.execution_price >= pdata['close']):
-          in_the_money = True
-        else:
-          in_the_money = False            
-       
-      if (in_the_money == True):            
+
+      signed_pdelta = _signed_pdelta(order.buysell, receipt.execution_price, pdata['close'])
+      in_the_money = (signed_pdelta >= 0)
+      pdelta = abs(signed_pdelta)
+
+      if (in_the_money == True):
         profit = pdelta * order.leverage
         pos.history[date] = profit
       else: # if (in_the_money == False):      
