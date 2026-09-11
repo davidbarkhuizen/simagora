@@ -37,10 +37,12 @@ class Trader(HasAutoId):
 
   def load_strategy(self):
     '''
-    called by simulator
+    called by simulator. strategy_class reads whatever it needs off
+    self (self.instrument or self.universe) rather than being handed
+    it directly - see SingleInstrumentStrategy/MultiInstrumentStrategy
     '''
     strategy_class = resolve_strategy_class(self.strategy_name)
-    self.strategy = strategy_class(self, self.instrument, self.start_date, self.end_date)
+    self.strategy = strategy_class(self, self.start_date, self.end_date)
   def submit_order(self, order):
     '''
     submit order to broker for execution

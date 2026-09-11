@@ -56,12 +56,66 @@ class FakeDataFeed(object):
     variance = sum((v - mean) ** 2 for v in values) / Decimal(len(values))
     return variance.sqrt()
 
+  def n_day_return(self, instrument, d, field, n):
+    today_value = self._value_n_days_before(d, field, 0)
+    past_value = self._value_n_days_before(d, field, n)
+    if (today_value is None) or (past_value is None) or (past_value == 0):
+      return None
+    return (today_value - past_value) / past_value
+
   def _trailing_values(self, d, field, n, include_current):
     dates = sorted(self.price_info_by_date.keys())
     idx = dates.index(d)
     end = idx + 1 if include_current else idx
     window = dates[max(0, end - n): end]
     return [self.price_info_by_date[dd][field] for dd in window]
+
+  def _value_n_days_before(self, d, field, n):
+    dates = sorted(self.price_info_by_date.keys())
+    if (d not in dates):
+      return None
+    idx = dates.index(d) - n
+    if (idx < 0):
+      return None
+    return self.price_info_by_date[dates[idx]][field]
+
+
+class FakeUniverse(object):
+  '''
+  minimal multi-instrument stand-in for Universe: one FakeDataFeed per
+  instrument, dispatched by the `instrument` argument every method
+  already takes - mirrors Universe's own real DataFeed dispatch
+  '''
+
+  def __init__(self, feeds_by_instrument):
+    self.feeds = feeds_by_instrument
+
+  def _feed_for(self, instrument):
+    return self.feeds[instrument]
+
+  def get_price_info(self, instrument, d):
+    return self._feed_for(instrument).get_price_info(instrument, d)
+
+  def get_price(self, instrument, d, field):
+    return self._feed_for(instrument).get_price(instrument, d, field)
+
+  def n_day_moving_avg(self, instrument, d, field, n):
+    return self._feed_for(instrument).n_day_moving_avg(instrument, d, field, n)
+
+  def n_day_high(self, instrument, d, field, n):
+    return self._feed_for(instrument).n_day_high(instrument, d, field, n)
+
+  def n_day_low(self, instrument, d, field, n):
+    return self._feed_for(instrument).n_day_low(instrument, d, field, n)
+
+  def n_day_std_dev(self, instrument, d, field, n):
+    return self._feed_for(instrument).n_day_std_dev(instrument, d, field, n)
+
+  def n_day_return(self, instrument, d, field, n):
+    return self._feed_for(instrument).n_day_return(instrument, d, field, n)
+
+  def date_is_trading_day(self, d):
+    return any(feed.get_price_info(None, d) is not None for feed in self.feeds.values())
 
 
 def make_broker(datafeed=None):

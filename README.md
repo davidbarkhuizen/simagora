@@ -77,8 +77,11 @@ to be run from the repo root.
 - `datafeed.py` — loads daily OHLCV CSV data for an instrument and exposes price
   lookups, n-day moving averages, n-day highs/lows (used for breakout signals -
   these exclude the given date itself, since a value is always part of its own
-  running extreme), and n-day standard deviation (used for Bollinger-Band-style
-  bands). See Data below for where it reads from.
+  running extreme), n-day standard deviation (used for Bollinger-Band-style
+  bands), and n-day return (the fractional change in a price field between a date
+  and n trading days before it - a point-in-time lookback, unlike the other
+  `n_day_*` methods which are all window aggregates). See Data below for where it
+  reads from.
 - `universe.py` — `Universe`, a multi-instrument sibling of `DataFeed`: one
   `DataFeed` per instrument, dispatched by the `instrument` argument every method
   above already accepts but a plain `DataFeed` ignores (it only ever tracks one).
@@ -147,10 +150,9 @@ default, so a typo doesn't quietly run the wrong strategy; `None` (what every
 `Trader`-constructing test in this repo passes, since they don't care which
 strategy loads) resolves to `'movavg'`.
 
-All three strategies above are single-instrument (`BaseStrategy` reads
+All three strategies above are single-instrument (`SingleInstrumentStrategy` reads
 `trader.instrument`). No multi-instrument strategy is implemented yet — see
-Multi-instrument support below for the plumbing that's in place for one, and
-what's still needed.
+Multi-instrument support below for the plumbing that's in place for one.
 
 ## Multi-instrument support
 
@@ -190,11 +192,23 @@ was handed.
     its instrument has no data, rather than checking take-profit/stop-loss/expiry
     against a missing high/low/close.
 
-What's still needed before an actual multi-instrument strategy can be written: a
-way to compute a return over an arbitrary lookback (none of `DataFeed`'s `n_day_*`
-methods answer "what was the price N days ago" - they're all window aggregates),
-and a `MultiInstrumentStrategy` base analogous to the existing single-instrument
-one, reading `trader.universe` instead of `trader.instrument`.
+- **`BaseStrategy` is split by instrument shape.** `engine/strategy.py`'s
+  `BaseStrategy` itself no longer knows about instruments at all — just the shared
+  trader/datafeed wiring, order submission, and `log_self()`. It's split into
+  `SingleInstrumentStrategy` (sets `self.instrument = trader.instrument`) and
+  `MultiInstrumentStrategy` (sets `self.universe = trader.universe`); the three
+  concrete strategies above all inherit from `SingleInstrumentStrategy`.
+  `DataFeed`/`Universe`'s `n_day_return(instrument, date, price, n)` gives a
+  multi-instrument strategy the point-in-time lookback return it needs (e.g. to
+  rank instruments by momentum) that the other `n_day_*` window aggregates don't
+  provide.
+
+What's still needed before an actual multi-instrument strategy can be written:
+nothing structural — a concrete strategy just needs to subclass
+`MultiInstrumentStrategy`, iterate `self.universe`, and call `self.datafeed`
+per-instrument (see `tests/test_strategy.py`'s `TestMultiInstrumentStrategy` for a
+worked example). None is implemented yet (e.g. a dual-momentum strategy that ranks
+`self.universe` by `n_day_return` and buys the leader).
 
 ## Position closing
 
