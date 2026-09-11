@@ -5,17 +5,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
-def plot_price_volume(dates, values, volume, start_date, end_date):
+def slice_by_date_range(dates, start_date, end_date, *series):
   '''
-  extract specified slice from total series, generate and return matplotlib figure for slice
+  extract the [start_date, end_date] slice from dates and each series
+  in series (parallel arrays), returning (date_slice, slice_start_date,
+  slice_end_date, series_slices) - series_slices has one slice per
+  input series, in the same order.
   '''
-  # extract desired time-slice from total series  
   if (dates[0] < dates[len(dates) - 1]):
     start_idx = 0
     for i in range(0, len(dates)):
       if dates[i] <= start_date:
         start_idx = i
-      else:      
+      else:
         break
     end_idx = 0
     for i in range(0, len(dates)):
@@ -28,7 +30,7 @@ def plot_price_volume(dates, values, volume, start_date, end_date):
     for i in range(0, len(dates)):
       if dates[i] >= start_date:
         start_idx = i
-      else:      
+      else:
         break
     end_idx = 0
     for i in range(0, len(dates)):
@@ -45,13 +47,21 @@ def plot_price_volume(dates, values, volume, start_date, end_date):
   if (start_idx == end_idx):
     start_idx = 0
     end_idx = len(dates)
-    
+
   # cut slice
   date_slice = dates[start_idx : end_idx]
   slice_start_date = dates[start_idx]
   slice_end_date = dates[end_idx]
-  values_slice = values[start_idx : end_idx]
-  volume_slice = volume[start_idx : end_idx]
+  series_slices = tuple(s[start_idx : end_idx] for s in series)
+
+  return date_slice, slice_start_date, slice_end_date, series_slices
+
+def plot_price_volume(dates, values, volume, start_date, end_date):
+  '''
+  extract specified slice from total series, generate and return matplotlib figure for slice
+  '''
+  date_slice, slice_start_date, slice_end_date, (values_slice, volume_slice) = \
+    slice_by_date_range(dates, start_date, end_date, values, volume)
 
   # generate matplotlib plot
   x = np.array(date_slice) #np.array(ords)
@@ -100,51 +110,9 @@ def plot_price_volume(dates, values, volume, start_date, end_date):
   
 def gen_intraday_volatility_plots(dates, high, low, close, start_date, end_date) :
 
-# extract desired time-slice from total series  
-  if (dates[0] < dates[len(dates) - 1]):
-    start_idx = 0
-    for i in range(0, len(dates)):
-      if dates[i] <= start_date:
-        start_idx = i
-      else:      
-        break
-    end_idx = 0
-    for i in range(0, len(dates)):
-      if dates[i] <= end_date:
-        end_idx = i
-      else:
-        break
-  else:
-    start_idx = 0
-    for i in range(0, len(dates)):
-      if dates[i] >= start_date:
-        start_idx = i
-      else:      
-        break
-    end_idx = 0
-    for i in range(0, len(dates)):
-      if dates[i] >= end_date:
-        end_idx = i
-      else:
-        break
+  date_slice, slice_start_date, slice_end_date, (high_slice, low_slice, close_slice) = \
+    slice_by_date_range(dates, start_date, end_date, high, low, close)
 
-  # swap if start_date after end_date
-  if (start_idx > end_idx):
-    (start_idx, end_idx) = (end_idx, start_idx)
-
-  # if start_date = end_date, use entire series
-  if (start_idx == end_idx):
-    start_idx = 0
-    end_idx = len(dates)
-    
-  # cut slice
-  date_slice = dates[start_idx : end_idx]
-  slice_start_date = dates[start_idx]
-  slice_end_date = dates[end_idx]
-  low_slice = low[start_idx : end_idx]
-  high_slice = high[start_idx : end_idx]
-  close_slice = close[start_idx : end_idx]
-  
   delta = []
   for i in range(len(high_slice)):
     delta.append(float(100 * (high_slice[i] - low_slice[i]) / close_slice[i]) )
