@@ -168,6 +168,27 @@ class TestExecuteOrdersToClose(unittest.TestCase):
     receipt = self.receiptQ.get()
     self.assertEqual(receipt.status, 'position_not_open')
 
+  def test_close_order_from_another_trader_is_rejected(self):
+    open_order = Order('s&p500', 'buy', 1, Decimal('90'), Decimal('110'), self.day1)
+    self.trader.submit_order(open_order)
+    self.broker.execute_orders_to_open(self.day1)
+    pos = self.broker.open_positions[0]
+
+    other_trader = Trader(self.datafeed, self.broker, Decimal('10000'), 's&p500', None, self.day1, self.day2)
+    close_order = CloseOrder(pos.id, self.day2)
+    other_trader.submit_order(close_order)
+    count = self.broker.execute_orders_to_close(self.day2)
+
+    self.assertEqual(count, 1)
+    receipts = self.receiptQ.extract_matching(lambda r: r.order is close_order)
+    self.assertEqual(len(receipts), 1)
+    self.assertEqual(receipts[0].status, 'not_authorized')
+
+    # position is untouched: still open, owning trader's balances unchanged
+    self.assertIn(pos, self.broker.open_positions)
+    self.assertEqual(self.trader.ac.cash_bal, Decimal('9990'))
+    self.assertEqual(self.trader.ac.margin_bal, Decimal('10'))
+
 
 class TestPositionExpired(unittest.TestCase):
 
