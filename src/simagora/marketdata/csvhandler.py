@@ -2,6 +2,7 @@
 
 import csv
 import datetime
+import logging
 from decimal import *
 
 def load_csv_list_from_file(file_path):
@@ -87,13 +88,15 @@ def rows_to_dicts(rows):
 
   dicts = []
   for r in rows:
-  
-    #try:
-    dict = row_to_dict(r)
+
+    try:
+      dict = row_to_dict(r)
+    except Exception as e:
+      logging.warning('skipping malformed CSV row %r: %s' % (r, e))
+      continue
+
     if (dict != None):
       dicts.append(dict)
-    #except Exception, e:
-     # print(e)
 
   return dicts
   

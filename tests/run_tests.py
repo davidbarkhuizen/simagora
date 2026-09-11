@@ -9,6 +9,7 @@ from simagora.domain.order import Order
 from simagora.domain.closeorder import CloseOrder
 from simagora.domain.orderreceipt import OrderReceipt
 from simagora.domain.position import Position
+from simagora.marketdata.csvhandler import rows_to_dicts
 
 
 class FakeDataFeed(object):
@@ -357,6 +358,33 @@ class TestTraderProcessReceipts(unittest.TestCase):
     remaining = self.receiptQ.get()
     self.assertIsNotNone(remaining)
     self.assertEqual(remaining.order.trader_id, other_trader.id)
+
+
+class TestRowsToDicts(unittest.TestCase):
+
+  def test_skips_malformed_row_instead_of_aborting_the_whole_load(self):
+    rows = [
+      ['2010-01-01', '100', '105', '95', '102', '1000', '102'],
+      ['2010-01-02', '100', '105'],  # malformed - missing low/close/etc
+      ['2010-01-03', '103', '108', '99', '104', '1200', '104'],
+    ]
+
+    dicts = rows_to_dicts(rows)
+
+    self.assertEqual(len(dicts), 2)
+    self.assertEqual(dicts[0]['date'], date(2010, 1, 1))
+    self.assertEqual(dicts[1]['date'], date(2010, 1, 3))
+
+  def test_skips_header_row_with_unparseable_date(self):
+    rows = [
+      ['date', 'open', 'high', 'low', 'close', 'volume', 'adj_close'],
+      ['2010-01-01', '100', '105', '95', '102', '1000', '102'],
+    ]
+
+    dicts = rows_to_dicts(rows)
+
+    self.assertEqual(len(dicts), 1)
+    self.assertEqual(dicts[0]['date'], date(2010, 1, 1))
 
 
 if __name__ == '__main__':
