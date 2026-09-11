@@ -31,6 +31,23 @@ class FakeDataFeed(object):
     return sum(values) / Decimal(len(values))
 
 
+def make_broker(datafeed=None):
+  '''construct a Broker with fresh MsgQs; returns (orderQ, receiptQ, term_req_Q, term_notice_Q, broker)'''
+  orderQ = MsgQ()
+  receiptQ = MsgQ()
+  term_req_Q = MsgQ()
+  term_notice_Q = MsgQ()
+  broker = Broker(datafeed, orderQ, receiptQ, term_req_Q, term_notice_Q)
+  return orderQ, receiptQ, term_req_Q, term_notice_Q, broker
+
+
+def make_broker_and_trader(datafeed, opening_bal, instrument, start_date, end_date):
+  '''as make_broker(), plus a Trader registered with the broker; returns (..., broker, trader)'''
+  orderQ, receiptQ, term_req_Q, term_notice_Q, broker = make_broker(datafeed)
+  trader = Trader(datafeed, broker, opening_bal, instrument, None, start_date, end_date)
+  return orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader
+
+
 class TestClassIdGen(unittest.TestCase):
 
   def test_class_auto_id_gen(self):
@@ -41,11 +58,8 @@ class TestClassIdGen(unittest.TestCase):
 class TestOrderQFilter(unittest.TestCase):
 
   def setUp(self):
-    self.orderQ = MsgQ()
-    self.receiptQ = MsgQ()
-    self.term_req_Q = MsgQ()
-    self.term_notice_Q = MsgQ()
-    self.broker = Broker(None, self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q)
+    (self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q,
+     self.broker) = make_broker()
 
   def test_filter(self):
     issue_date = date(2010, 1, 1)
@@ -65,11 +79,6 @@ class TestOrderQFilter(unittest.TestCase):
 class TestExecuteOrdersToClose(unittest.TestCase):
 
   def setUp(self):
-    self.orderQ = MsgQ()
-    self.receiptQ = MsgQ()
-    self.term_req_Q = MsgQ()
-    self.term_notice_Q = MsgQ()
-
     self.day1 = date(2010, 1, 1)
     self.day2 = date(2010, 1, 2)
 
@@ -78,8 +87,9 @@ class TestExecuteOrdersToClose(unittest.TestCase):
       self.day2: {'high': Decimal('115'), 'low': Decimal('105'), 'close': Decimal('110')},
     })
 
-    self.broker = Broker(self.datafeed, self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q)
-    self.trader = Trader(self.datafeed, self.broker, Decimal('10000'), 's&p500', None, self.day1, self.day2)
+    (self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q,
+     self.broker, self.trader) = make_broker_and_trader(
+        self.datafeed, Decimal('10000'), 's&p500', self.day1, self.day2)
 
   def test_close_order_settles_and_closes_position(self):
     open_order = Order('s&p500', 'buy', 1, Decimal('90'), Decimal('110'), self.day1)
@@ -119,11 +129,6 @@ class TestExecuteOrdersToClose(unittest.TestCase):
 class TestPositionExpired(unittest.TestCase):
 
   def setUp(self):
-    self.orderQ = MsgQ()
-    self.receiptQ = MsgQ()
-    self.term_req_Q = MsgQ()
-    self.term_notice_Q = MsgQ()
-
     self.day1 = date(2010, 1, 1)
     self.day2 = date(2010, 1, 2)
 
@@ -134,8 +139,9 @@ class TestPositionExpired(unittest.TestCase):
       self.day2: {'high': Decimal('105'), 'low': Decimal('95'), 'close': Decimal('102')},
     })
 
-    self.broker = Broker(self.datafeed, self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q)
-    self.trader = Trader(self.datafeed, self.broker, Decimal('10000'), 's&p500', None, self.day1, self.day2)
+    (self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q,
+     self.broker, self.trader) = make_broker_and_trader(
+        self.datafeed, Decimal('10000'), 's&p500', self.day1, self.day2)
 
   def test_position_closes_on_expiry_date(self):
     open_order = Order('s&p500', 'buy', 1, Decimal('90'), Decimal('110'), self.day1, expiry_date=self.day2)
@@ -164,11 +170,6 @@ class TestPositionExpired(unittest.TestCase):
 class TestStrategyCloseInTheMoneyPositions(unittest.TestCase):
 
   def setUp(self):
-    self.orderQ = MsgQ()
-    self.receiptQ = MsgQ()
-    self.term_req_Q = MsgQ()
-    self.term_notice_Q = MsgQ()
-
     self.day1 = date(2010, 1, 1)
     self.day2 = date(2010, 1, 2)
 
@@ -177,8 +178,9 @@ class TestStrategyCloseInTheMoneyPositions(unittest.TestCase):
       self.day2: {'high': Decimal('112'), 'low': Decimal('108'), 'close': Decimal('110')},
     })
 
-    self.broker = Broker(self.datafeed, self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q)
-    self.trader = Trader(self.datafeed, self.broker, Decimal('10000'), 's&p500', None, self.day1, self.day2)
+    (self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q,
+     self.broker, self.trader) = make_broker_and_trader(
+        self.datafeed, Decimal('10000'), 's&p500', self.day1, self.day2)
     self.strategy = self.trader.strategy
 
   def make_manual_position(self, ins, buysell, execution_price):
