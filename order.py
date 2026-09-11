@@ -45,6 +45,6 @@ class Order(object):
     
 
   def __unicode__(self):
-    return (ins + ' - ' + buysell + ' - ' + quantity)
+    return (self.ins + ' - ' + self.buysell + ' - ' + str(self.quantity))
   def __str__(self):
-    return (ins + ' - ' + buysell + ' - ' + quantity)
+    return (self.ins + ' - ' + self.buysell + ' - ' + str(self.quantity))
