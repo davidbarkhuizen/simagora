@@ -55,3 +55,9 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# simagora run output (log/, plot/ dirs must exist for launcher.py to run)
+log/*
+!log/.gitkeep
+plot/*
+!plot/.gitkeep
