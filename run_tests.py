@@ -7,6 +7,8 @@ from msgq import MsgQ
 from order import Order
 from closeorder import CloseOrder
 from trader import Trader
+from orderreceipt import OrderReceipt
+from position import Position
 
 
 class FakeDataFeed(object):
@@ -17,6 +19,16 @@ class FakeDataFeed(object):
 
   def get_price_info(self, instrument, d):
     return self.price_info_by_date[d]
+
+  def get_price(self, instrument, d, field):
+    return self.price_info_by_date[d][field]
+
+  def n_day_moving_avg(self, instrument, d, field, n):
+    dates = sorted(self.price_info_by_date.keys())
+    idx = dates.index(d)
+    window = dates[max(0, idx - n + 1): idx + 1]
+    values = [self.price_info_by_date[dd][field] for dd in window]
+    return sum(values) / Decimal(len(values))
 
 
 class TestClassIdGen(unittest.TestCase):
@@ -147,6 +159,80 @@ class TestPositionExpired(unittest.TestCase):
 
     self.assertEqual(len(self.broker.open_positions), 1)
     self.assertEqual(len(self.broker.closed_positions), 0)
+
+
+class TestStrategyCloseInTheMoneyPositions(unittest.TestCase):
+
+  def setUp(self):
+    self.orderQ = MsgQ()
+    self.receiptQ = MsgQ()
+    self.term_req_Q = MsgQ()
+    self.term_notice_Q = MsgQ()
+
+    self.day1 = date(2010, 1, 1)
+    self.day2 = date(2010, 1, 2)
+
+    self.datafeed = FakeDataFeed({
+      self.day1: {'high': Decimal('105'), 'low': Decimal('95'), 'close': Decimal('100')},
+      self.day2: {'high': Decimal('112'), 'low': Decimal('108'), 'close': Decimal('110')},
+    })
+
+    self.broker = Broker(self.datafeed, self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q)
+    self.trader = Trader(self.datafeed, self.broker, Decimal('10000'), 's&p500', None, self.day1, self.day2)
+    self.strategy = self.trader.strategy
+
+  def make_manual_position(self, ins, buysell, execution_price):
+    '''build a position directly, bypassing broker cash/margin bookkeeping,
+    to control its execution price precisely for pnl testing'''
+    order = Order(ins, buysell, 1, Decimal('1'), Decimal('1000'), self.day1)
+    order.trader_id = self.trader.id
+    receipt = OrderReceipt(order, 'opened', execution_price, self.day1, Decimal('0'))
+    pos = Position(receipt)
+    self.broker.open_positions.append(pos)
+    self.broker.positions[pos.id] = pos
+    return pos
+
+  def test_close_in_the_money_positions_filters_by_direction_and_instrument(self):
+    # day2 close (110) > day1 exec price (100): a 'buy' opened at 100 is in the money
+    profitable_buy = self.make_manual_position('s&p500', 'buy', Decimal('100'))
+    # exec price (120) > day2 close (110): a 'buy' opened at 120 is a loss
+    losing_buy = self.make_manual_position('s&p500', 'buy', Decimal('120'))
+    # exec price (120) > day2 close (110): a 'sell' opened at 120 is in the money
+    profitable_sell = self.make_manual_position('s&p500', 'sell', Decimal('120'))
+    # same as profitable_buy, but a different instrument
+    other_instrument_buy = self.make_manual_position('other_instrument', 'buy', Decimal('100'))
+
+    self.trader.ac.tally_individual_open_positions(self.day2)
+
+    self.strategy.close_in_the_money_positions(self.day2, 'buy')
+
+    closed_ids = [co.position_id for co in self.orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))]
+
+    self.assertEqual(closed_ids, [profitable_buy.id])
+    self.assertNotIn(losing_buy.id, closed_ids)
+    self.assertNotIn(profitable_sell.id, closed_ids)
+    self.assertNotIn(other_instrument_buy.id, closed_ids)
+
+  def test_execute_closes_existing_in_the_money_position_on_new_buy_signal(self):
+    open_order = Order('s&p500', 'buy', 1, Decimal('50'), Decimal('200'), self.day1)
+    self.trader.submit_order(open_order)
+    self.broker.execute_orders_to_open(self.day1)
+    pos = self.broker.open_positions[0]
+
+    # mimic the simulator's daily bookkeeping step, which runs before execute_strategy
+    self.trader.ac.tally_individual_open_positions(self.day2)
+
+    # day2: mavg('high') = avg(105, 112) = 108.5, close = 110 -> buy signal
+    self.trader.execute_strategy(self.day2)
+
+    new_orders = self.orderQ.extract_matching(lambda x: isinstance(x, Order))
+    close_orders = self.orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+
+    self.assertEqual(len(new_orders), 1)
+    self.assertEqual(new_orders[0].buysell, 'buy')
+
+    self.assertEqual(len(close_orders), 1)
+    self.assertEqual(close_orders[0].position_id, pos.id)
 
 
 if __name__ == '__main__':

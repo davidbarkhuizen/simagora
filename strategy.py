@@ -1,4 +1,5 @@
 from order import Order
+from closeorder import CloseOrder
 from decimal import *
 import logging
 
@@ -21,7 +22,23 @@ class Strategy(object):
     
   def submit_order(self, order):
     self.trader.submit_order(order)
-    
+
+  def close_in_the_money_positions(self, date, buysell):
+    '''
+    submit a CloseOrder for each of this trader's own open positions,
+    on this instrument, in the given direction, that is currently in
+    the money (per today's tally in pos.history, already computed by
+    Account.tally_individual_open_positions before the strategy runs)
+    '''
+    open_positions = self.trader.broker.get_open_positions_for_trader(self.trader.id)
+    for pos in open_positions:
+      order = pos.order_receipt.order
+      if (order.ins != self.instrument) or (order.buysell != buysell):
+        continue
+      pnl = pos.history.get(date)
+      if (pnl is not None) and (pnl > 0):
+        self.submit_order(CloseOrder(pos.id, date))
+
   def execute(self, date):
     ins = self.instrument
     n = Strategy.n
@@ -40,19 +57,23 @@ class Strategy(object):
       take_profit_level = cur_price * (1 + take_profit_margin)
       
       buy_order = Order(ins, 'buy', 1, stop_loss_level, take_profit_level, date)
-      self.submit_order(buy_order)      
-      
+      self.submit_order(buy_order)
+
       # CLOSE OUT EXISTING IN THE MONEY BUY POSITIONS
+      self.close_in_the_money_positions(date, 'buy')
     elif (cur_price < mavg):
-       # SUBMIT NEW SELL ORDER      
+       # SUBMIT NEW SELL ORDER
       stop_loss_margin = Decimal(str(Strategy.stop_loss_margin))
-      stop_loss_level = cur_price * (1 + stop_loss_margin)      
-      
+      stop_loss_level = cur_price * (1 + stop_loss_margin)
+
       take_profit_margin = Decimal(str(Strategy.take_profit_margin))
       take_profit_level = cur_price * (1 - take_profit_margin)
-      
+
       sell_order = Order(ins, 'sell', 1, stop_loss_level, take_profit_level, date)
-      self.submit_order(sell_order) 
+      self.submit_order(sell_order)
+
+      # CLOSE OUT EXISTING IN THE MONEY SELL POSITIONS
+      self.close_in_the_money_positions(date, 'sell')
     elif (cur_price == mavg):
       pass
       
