@@ -48,7 +48,7 @@ class Account(HasAutoId):
     self.cash_bal += margin
     
     # take profit      
-    profit = pdelta * order.leverage
+    profit = pdelta * order.quantity * order.leverage
     self.cash_bal = self.cash_bal + profit      
     self.net_booked_position = self.net_booked_position + profit
     
@@ -96,7 +96,7 @@ class Account(HasAutoId):
     self.cash_bal += margin
 
     # profit or loss
-    pnl = pdelta * order.leverage
+    pnl = pdelta * order.quantity * order.leverage
     self.cash_bal = self.cash_bal + pnl
     self.net_booked_position = self.net_booked_position + pnl
 
@@ -128,7 +128,7 @@ class Account(HasAutoId):
       self.cash_bal += margin
       
       # take profit      
-      profit = pdelta * order.leverage
+      profit = pdelta * order.quantity * order.leverage
       self.cash_bal = self.cash_bal + profit            
       
       # record profit
@@ -145,7 +145,7 @@ class Account(HasAutoId):
             
       # absorb partial loss of margin
       # loss = movement from exec * leverage
-      loss = pdelta * order.leverage
+      loss = pdelta * order.quantity * order.leverage
       residual = margin - loss
       
       self.cash_bal = self.cash_bal + residual
@@ -179,10 +179,10 @@ class Account(HasAutoId):
       pdelta = abs(signed_pdelta)
 
       if (in_the_money == True):
-        profit = pdelta * order.leverage
+        profit = pdelta * order.quantity * order.leverage
         pos.history[date] = profit
       else: # if (in_the_money == False):      
-        loss = pdelta * order.leverage
+        loss = pdelta * order.quantity * order.leverage
         residual = margin - loss
         pos.history[date] = (- loss)
 

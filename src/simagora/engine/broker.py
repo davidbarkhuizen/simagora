@@ -68,13 +68,12 @@ class Broker(object):
       # calc exec price
       exec_price = self.calc_execution_price(order.ins, order.buysell, date)      
       
-      # calculate margin req      
-      leverage = Decimal(1)
+      # calculate margin req - scales with the order's own quantity/leverage
       margin = None
-      if (order.buysell == 'buy'):        
-        margin = (exec_price - order.stop_loss) * leverage
+      if (order.buysell == 'buy'):
+        margin = (exec_price - order.stop_loss) * order.quantity * order.leverage
       else: # sell
-        margin = (order.stop_loss - exec_price) * leverage
+        margin = (order.stop_loss - exec_price) * order.quantity * order.leverage
       
       trader = self.traders[order.trader_id]
 
