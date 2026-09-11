@@ -1,4 +1,4 @@
-from termnotice import TermNotice
+from ..domain.termnotice import TermNotice
 from decimal import Decimal
 import logging
 
