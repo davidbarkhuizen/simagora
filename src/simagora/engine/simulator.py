@@ -2,7 +2,7 @@ from datetime import *
 from ..marketdata.datafeed import DataFeed
 from .broker import Broker
 from .trader import Trader
-from .strategy import Strategy
+from .strategy import MovingAverageCrossoverStrategy
 from .msgq import MsgQ
 # ------------------
 import datetime
@@ -134,8 +134,8 @@ class Simulator(object):
       if (self.datafeed.date_is_trading_day(d) == True):        
         dates.append(d) 
           
-        mavg_top = df.n_day_moving_avg(None, d, 'high', Strategy.n)
-        mavg_bottom = df.n_day_moving_avg(None, d, 'low', Strategy.n)        
+        mavg_top = df.n_day_moving_avg(None, d, 'high', MovingAverageCrossoverStrategy.moving_average_window_days)
+        mavg_bottom = df.n_day_moving_avg(None, d, 'low', MovingAverageCrossoverStrategy.moving_average_window_days)
           
         mavg_band_ceiling.append(mavg_top)
         mavg_band_floor.append(mavg_bottom)

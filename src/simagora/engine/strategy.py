@@ -1,25 +1,31 @@
 from ..domain.order import Order
 from ..domain.closeorder import CloseOrder
-from decimal import *
+from decimal import Decimal
 import logging
 
 SOURCE_FILE_NAME = __file__
 
-class Strategy(object):
-  
-  n = 20
-  stop_loss_margin = 0.005 # 0.5 %
-  take_profit_margin = 0.01 # 1 %
+class MovingAverageCrossoverStrategy(object):
+  '''
+  buy when the closing price crosses above the n-day moving average of
+  daily highs, sell when it crosses below; every new position carries
+  fixed stop-loss/take-profit bands, and any of the strategy's own
+  same-direction open positions that are currently in the money get
+  closed out whenever a fresh same-direction signal fires
+  '''
+
+  moving_average_window_days = 20
+  stop_loss_margin = Decimal('0.005')    # 0.5 %
+  take_profit_margin = Decimal('0.01')   # 1 %
 
   def __init__(self, trader, instrument, start_date, end_date):
-    
     self.trader = trader
     self.datafeed = trader.datafeed
-    
+
     self.instrument = instrument
     self.start_date = start_date
     self.end_date = end_date
-    
+
   def submit_order(self, order):
     self.trader.submit_order(order)
 
@@ -41,20 +47,16 @@ class Strategy(object):
 
   def execute(self, date):
     ins = self.instrument
-    n = Strategy.n
-    
-    # calc n-day moving average of the daily high
-    mavg = self.datafeed.n_day_moving_avg(ins, date, 'high', n)    
-    # compare to current price @ close
-    cur_price = self.datafeed.get_price(ins, date, 'close')
+    window = self.moving_average_window_days
 
-    stop_loss_margin = Decimal(str(Strategy.stop_loss_margin))
-    take_profit_margin = Decimal(str(Strategy.take_profit_margin))
+    # n-day moving average of the daily high, vs today's closing price
+    mavg = self.datafeed.n_day_moving_avg(ins, date, 'high', window)
+    cur_price = self.datafeed.get_price(ins, date, 'close')
 
     if (cur_price > mavg): # +- tolerance
       # SUBMIT NEW BUY ORDER
-      stop_loss_level = cur_price * (1 - stop_loss_margin)
-      take_profit_level = cur_price * (1 + take_profit_margin)
+      stop_loss_level = cur_price * (1 - self.stop_loss_margin)
+      take_profit_level = cur_price * (1 + self.take_profit_margin)
 
       buy_order = Order(ins, 'buy', 1, stop_loss_level, take_profit_level, date)
       self.submit_order(buy_order)
@@ -62,9 +64,9 @@ class Strategy(object):
       # CLOSE OUT EXISTING IN THE MONEY BUY POSITIONS
       self.close_in_the_money_positions(date, 'buy')
     elif (cur_price < mavg):
-       # SUBMIT NEW SELL ORDER
-      stop_loss_level = cur_price * (1 + stop_loss_margin)
-      take_profit_level = cur_price * (1 - take_profit_margin)
+      # SUBMIT NEW SELL ORDER
+      stop_loss_level = cur_price * (1 + self.stop_loss_margin)
+      take_profit_level = cur_price * (1 - self.take_profit_margin)
 
       sell_order = Order(ins, 'sell', 1, stop_loss_level, take_profit_level, date)
       self.submit_order(sell_order)
@@ -73,19 +75,11 @@ class Strategy(object):
       self.close_in_the_money_positions(date, 'sell')
     elif (cur_price == mavg):
       pass
-      
+
   def log_self(self):
-    '''
-    '''
-    f = open(SOURCE_FILE_NAME, 'r')
-    lines = []
-    l = f.readline()
-    while (l != ''):
-      lines.append(l[:len(l)-2])
-      l = f.readline()      
-    f.close()
-    
-    for l in lines:
-      logging.info(l)    
-    
-    
+    '''log this strategy's own source, line by line, for the run's audit trail'''
+    with open(SOURCE_FILE_NAME, 'r') as f:
+      lines = [line.rstrip('\n') for line in f]
+
+    for line in lines:
+      logging.info(line)

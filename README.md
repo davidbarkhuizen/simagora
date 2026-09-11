@@ -61,15 +61,15 @@ to be run from the repo root.
 - `broker.py` — receives orders via `msgq.py` message queues, computes a fill price
   (midpoint of the day's high/low), opens/closes `Position`s, checks stop-loss/
   take-profit levels against intraday high/low, and updates account balances.
-- `trader.py` — holds a `Strategy` and an `Account`, submits orders, and drains its
+- `trader.py` — holds a strategy and an `Account`, submits orders, and drains its
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
   being silently discarded.
-- `strategy.py` — the one implemented strategy: buy/sell based on whether the closing
-  price is above/below the 20-day moving average of daily highs, with fixed 0.5%/1%
-  stop-loss/take-profit bands. On each new same-direction signal, it also submits
-  `CloseOrder`s for any of its own open positions, in that direction, that are
-  currently in the money.
+- `strategy.py` — the one implemented strategy, `MovingAverageCrossoverStrategy`:
+  buy/sell based on whether the closing price is above/below the 20-day moving
+  average of daily highs, with fixed 0.5%/1% stop-loss/take-profit bands. On each
+  new same-direction signal, it also submits `CloseOrder`s for any of its own open
+  positions, in that direction, that are currently in the money.
 - `simulator.py` — drives the day-by-day simulation loop between a start and end date.
 
 ### `marketdata/`
@@ -180,7 +180,7 @@ Launcher().go({
   'end_date':   date(2008, 6, 30),
   'ins':        'equity_index/^GSPC',  # resolved under the data root, see Data above
   'strat':      ['movavg'],  # a list - one Trader per element; the string itself is
-                              # unused (Trader always loads strategy.Strategy)
+                              # unused (Trader always loads MovingAverageCrossoverStrategy)
   'open_bal':   Decimal('10000.00'),
 })
 ```
