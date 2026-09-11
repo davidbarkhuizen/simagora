@@ -27,7 +27,9 @@ Per `initial_spec.txt`, the design has 3 conceptual agents:
   take-profit levels against intraday high/low, and updates account balances.
 - `strategy.py` — the one implemented strategy: buy/sell based on whether the closing
   price is above/below the 20-day moving average of daily highs, with fixed 0.5%/1%
-  stop-loss/take-profit bands. It doesn't currently issue `CloseOrder`s itself.
+  stop-loss/take-profit bands. On each new same-direction signal, it also submits
+  `CloseOrder`s for any of its own open positions, in that direction, that are
+  currently in the money.
 - `simulator.py` / `launcher.py` — drive the day-by-day simulation loop between a
   start and end date, then plot results with matplotlib (`plot.py`).
 - `order.py` — an order to open a new position (buy/sell, quantity, stop-loss,
