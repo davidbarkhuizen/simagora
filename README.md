@@ -79,6 +79,11 @@ to be run from the repo root.
   these exclude the given date itself, since a value is always part of its own
   running extreme), and n-day standard deviation (used for Bollinger-Band-style
   bands). See Data below for where it reads from.
+- `universe.py` — `Universe`, a multi-instrument sibling of `DataFeed`: one
+  `DataFeed` per instrument, dispatched by the `instrument` argument every method
+  above already accepts but a plain `DataFeed` ignores (it only ever tracks one).
+  Exposes the identical method set, so it's a drop-in replacement anywhere a
+  "datafeed" is expected. See Multi-instrument support below.
 
 ### `reporting/`
 
@@ -141,6 +146,55 @@ An unrecognized name raises `ValueError` rather than silently falling back to a
 default, so a typo doesn't quietly run the wrong strategy; `None` (what every
 `Trader`-constructing test in this repo passes, since they don't care which
 strategy loads) resolves to `'movavg'`.
+
+All three strategies above are single-instrument (`BaseStrategy` reads
+`trader.instrument`). No multi-instrument strategy is implemented yet — see
+Multi-instrument support below for the plumbing that's in place for one, and
+what's still needed.
+
+## Multi-instrument support
+
+`Broker`/`Account`/`Position`/`Order` were already instrument-aware everywhere it
+mattered — every relevant call already threads `order.ins` through
+(`Broker.calc_execution_price(ins, ...)`, `Account.tally_individual_open_positions`
+keyed off `order.ins`, etc.) — so multi-instrument support turned out to need no
+changes there at all. `DataFeed` was the actual bottleneck: constructed for exactly
+one instrument, with every method silently ignoring the `instrument` argument it
+was handed.
+
+- `Simulator`/`Trader` both take an optional `universe` argument (a list of
+  instruments, which must include `instrument`) alongside the existing single
+  `instrument`. It's fully additive: `universe=None` (the default, and what every
+  existing caller - `launcher.py`, every test - passes) reproduces today's behavior
+  exactly, one single-instrument `DataFeed`. Given a `universe`, `Simulator` builds
+  a `Universe` instead and every `Trader` gets `self.universe` for a
+  multi-instrument strategy to trade across; `instrument` remains the "primary"
+  instrument `Simulator.plot()` charts either way, since that's inherently
+  single-instrument-shaped.
+- `Launcher`'s `p` dict accepts an optional `'universe'` key, threaded straight
+  through to `Simulator`.
+- **Calendar mismatches are handled, not just assumed away.**
+  `Universe.date_is_trading_day()` is a *union* across the whole universe - true if
+  *any* tracked instrument trades that date - so a date can easily be valid for one
+  instrument and not another (different exchange holidays, different asset
+  classes). Three places would otherwise crash on the resulting `None` price
+  lookup, so all three now degrade gracefully instead:
+  - `Trader.execute_strategy()` skips calling into the strategy entirely on a day
+    the trader's own instrument has no data (checked directly - no way to ask a
+    `Universe` "is it a trading day for *this* instrument" without it).
+  - `Broker.execute_orders_to_open`/`execute_orders_to_close` reject with a new
+    `'instrument_not_trading'` receipt status (same pattern as the existing
+    `'gapped_through_stop_loss'`/`'insufficient_cash_bal'`) instead of crashing on
+    `calc_execution_price` returning `None`.
+  - `Broker.manage_open_positions` simply leaves a position alone for the day if
+    its instrument has no data, rather than checking take-profit/stop-loss/expiry
+    against a missing high/low/close.
+
+What's still needed before an actual multi-instrument strategy can be written: a
+way to compute a return over an arbitrary lookback (none of `DataFeed`'s `n_day_*`
+methods answer "what was the price N days ago" - they're all window aggregates),
+and a `MultiInstrumentStrategy` base analogous to the existing single-instrument
+one, reading `trader.universe` instead of `trader.instrument`.
 
 ## Position closing
 

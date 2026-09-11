@@ -1,5 +1,6 @@
 from datetime import *
 from ..marketdata.datafeed import DataFeed
+from ..marketdata.universe import Universe
 from .broker import Broker
 from .trader import Trader
 from .strategy import MovingAverageCrossoverStrategy
@@ -27,7 +28,7 @@ class Simulator(object):
   '''
   simulation manager
   '''  
-  def __init__(self, instrument, strategies, start_date, end_date, opening_bal,time_stamp=None):
+  def __init__(self, instrument, strategies, start_date, end_date, opening_bal, time_stamp=None, universe=None):
     '''
     constructs message queues
     initialises brokers and traders
@@ -35,29 +36,41 @@ class Simulator(object):
     strategies must be a list (one Trader is created per element,
     e.g. ['movavg'] for a single trader) - a bare string will silently
     create one trader per character in the string
+
+    universe, if given, is a list of instruments (which must include
+    `instrument`); self.datafeed becomes a multi-instrument Universe
+    instead of a single-instrument DataFeed, and every Trader gets the
+    same universe for a multi-instrument strategy to trade across.
+    `instrument` remains the "primary" instrument used for plot()'s
+    single-instrument-shaped charting either way.
     '''
     self.instrument = instrument
-    
+    self.universe = universe
+
     self.start_date = start_date
     self.end_date = end_date
-    
+
     self.opening_bal = opening_bal
-    
-    self.datafeed = DataFeed(instrument)
-    
-    self.orderQ = MsgQ()    
+
+    if (universe is not None):
+      self.datafeed = Universe(universe)
+    else:
+      self.datafeed = DataFeed(instrument)
+
+    self.orderQ = MsgQ()
     self.receiptQ = MsgQ()
-    
+
     self.term_req_Q = MsgQ()
     self.term_notice_Q = MsgQ()
-    
-    self.broker = Broker(self.datafeed, self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q)   
 
-    self.traders = []    
+    self.broker = Broker(self.datafeed, self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q)
+
+    self.traders = []
     for strategy in strategies:
-      trader = Trader(self.datafeed, self.broker, self.opening_bal, self.instrument, strategy, self.start_date, self.end_date)
+      trader = Trader(self.datafeed, self.broker, self.opening_bal, self.instrument, strategy,
+                       self.start_date, self.end_date, universe=self.universe)
       self.traders.append(trader)
-      
+
     self.time_stamp = time_stamp
  
   def run(self):    
@@ -129,18 +142,22 @@ class Simulator(object):
     pMin = None
     pMax = None
       
-    while (d <= self.end_date):          
-      # TRADING DAYS
-      if (self.datafeed.date_is_trading_day(d) == True):        
-        dates.append(d) 
-          
-        mavg_top = df.n_day_moving_avg(None, d, 'high', MovingAverageCrossoverStrategy.moving_average_window_days)
-        mavg_bottom = df.n_day_moving_avg(None, d, 'low', MovingAverageCrossoverStrategy.moving_average_window_days)
-          
+    while (d <= self.end_date):
+      # TRADING DAYS FOR THE PRIMARY INSTRUMENT
+      # (self.datafeed.date_is_trading_day(d) alone isn't precise enough
+      # once self.datafeed is a multi-instrument Universe - it's True
+      # if ANY instrument traded that day, not specifically self.instrument,
+      # and this chart is inherently shaped around one instrument)
+      pinfo = df.get_price_info(self.instrument, d)
+      if (pinfo is not None):
+        dates.append(d)
+
+        mavg_top = df.n_day_moving_avg(self.instrument, d, 'high', MovingAverageCrossoverStrategy.moving_average_window_days)
+        mavg_bottom = df.n_day_moving_avg(self.instrument, d, 'low', MovingAverageCrossoverStrategy.moving_average_window_days)
+
         mavg_band_ceiling.append(mavg_top)
         mavg_band_floor.append(mavg_bottom)
-        
-        pinfo = df.get_price_info(None, d)        
+
         prices.append(pinfo['close'])
         daily_high.append(pinfo['high'])
         daily_low.append(pinfo['low'])

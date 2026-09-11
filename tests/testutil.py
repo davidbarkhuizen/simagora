@@ -23,10 +23,12 @@ class FakeDataFeed(object):
     self.price_info_by_date = price_info_by_date
 
   def get_price_info(self, instrument, d):
-    return self.price_info_by_date[d]
+    '''None for a date this (single, implied) instrument has no data for - matches DataFeed's contract'''
+    return self.price_info_by_date.get(d)
 
   def get_price(self, instrument, d, field):
-    return self.price_info_by_date[d][field]
+    info = self.get_price_info(instrument, d)
+    return info[field] if (info is not None) else None
 
   def n_day_moving_avg(self, instrument, d, field, n):
     values = self._trailing_values(d, field, n, include_current=True)

@@ -6,14 +6,18 @@ class Trader(HasAutoId):
   '''
   '''
 
-  def __init__(self, datafeed, broker, opening_bal, instrument, strategy_name, start_date, end_date):
+  def __init__(self, datafeed, broker, opening_bal, instrument, strategy_name, start_date, end_date, universe=None):
     '''
     strategy_name is looked up in strategy.STRATEGY_REGISTRY by
     load_strategy() below; None resolves to the registry's default
+
+    universe, if given, is the list of instruments a multi-instrument
+    strategy trades across; defaults to just [instrument]
     '''
     self.id = Trader.new_id()
 
     self.instrument = instrument
+    self.universe = universe if (universe is not None) else [instrument]
     self.start_date = start_date
     self.end_date = end_date
     self.datafeed = datafeed
@@ -61,6 +65,14 @@ class Trader(HasAutoId):
     '''
     called by simulator
     '''
+    if (self.datafeed.get_price_info(self.instrument, date) is None):
+      # this trader's own instrument didn't trade today. Unreachable
+      # with a plain single-instrument DataFeed (Simulator.run() only
+      # calls in here on a date_is_trading_day()), but real once
+      # datafeed is a multi-instrument Universe whose union-of-all-
+      # instruments trading calendar can include a day this trader's
+      # own instrument sits out
+      return
     self.strategy.execute(date)
    
 

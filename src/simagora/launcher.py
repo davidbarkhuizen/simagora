@@ -18,7 +18,8 @@ class Launcher(object):
   
   def configure(self, p):
     print('constructing simulator')
-    self.sim = Simulator(p['ins'], p['strat'], p['start_date'], p['end_date'], p['open_bal'], self.tstamp)
+    self.sim = Simulator(p['ins'], p['strat'], p['start_date'], p['end_date'], p['open_bal'], self.tstamp,
+                          universe=p.get('universe'))
 
   def simulate(self):
     print('running simulator')
