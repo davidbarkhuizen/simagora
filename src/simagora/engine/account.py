@@ -1,16 +1,12 @@
 from ..domain.termnotice import TermNotice
+from ..domain.autoid import HasAutoId
 from decimal import Decimal
 import logging
 
-class Account(object):
+class Account(HasAutoId):
   '''
   '''
-  last_id = -1  
-  @classmethod
-  def new_id(cls):
-    cls.last_id = cls.last_id + 1
-    return cls.last_id
-  
+
   def __init__(self, broker, trader_id, cash=Decimal(0)):
     self.id = Account.new_id()
     self.broker = broker

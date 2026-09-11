@@ -1,13 +1,10 @@
-class CloseOrder(object):
+from .autoid import HasAutoId
+
+class CloseOrder(HasAutoId):
   '''
   an order to close a specific, already-open position, as opposed to
   Order which opens a new one
   '''
-  last_id = -1
-  @classmethod
-  def new_id(cls):
-    cls.last_id = cls.last_id + 1
-    return cls.last_id
 
   def __init__(self, position_id, issue_date, trader_id=None):
     self.id = CloseOrder.new_id()

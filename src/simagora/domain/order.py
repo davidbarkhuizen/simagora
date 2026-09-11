@@ -1,13 +1,9 @@
 from decimal import Decimal
 
-class Order(object):
-  
-  last_id = -1  
-  @classmethod
-  def new_id(cls):
-    cls.last_id = cls.last_id + 1
-    return cls.last_id
-  
+from .autoid import HasAutoId
+
+class Order(HasAutoId):
+
   def __init__(self,
     ins,
     buysell,
