@@ -12,6 +12,17 @@ import matplotlib as mpl
 # ------------------
 import logging
 
+def progress_tracking_bounds(start_date, end_date):
+  '''
+  (d_total, display_int) for run()'s progress display, both floored
+  to 1 to avoid dividing/modulo-ing by zero for a simulation spanning
+  fewer than 10 days (d_total == 0 is possible too, when
+  start_date == end_date)
+  '''
+  d_total = max((end_date - start_date).days, 1)
+  display_int = max(d_total // 10, 1)
+  return d_total, display_int
+
 class Simulator(object):
   '''
   simulation manager
@@ -54,12 +65,10 @@ class Simulator(object):
     simulate event series
     '''   
     current_date = date(self.start_date.year, self.start_date.month, self.start_date.day)
-    
-    length = self.end_date - self.start_date
-    d_total = length.days
-    display_int = d_total // 10
-      
-    while (current_date <= self.end_date):    
+
+    d_total, display_int = progress_tracking_bounds(self.start_date, self.end_date)
+
+    while (current_date <= self.end_date):
       
       # PROCESS TRADING DAYS
       if (self.datafeed.date_is_trading_day(current_date) == True):        
