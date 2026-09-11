@@ -30,8 +30,6 @@ src/simagora/
   timer.py      small perf-timing helper (mostly unused, see below)
 tests/
   run_tests.py  the test suite
-scripts/
-  arch.py       personal archiving utility (unrelated to the simulator itself)
 ```
 
 `src/` is a standard Python "src layout": the package isn't importable straight out
@@ -49,6 +47,8 @@ to be run from the repo root.
   independent of stop-loss/take-profit/expiry.
 - `orderreceipt.py`, `position.py`, `termnotice.py` — simple data/record classes
   used to track fills, open positions, and position termination.
+- `autoid.py` — `HasAutoId`, a small mixin giving each of the classes above (plus
+  `Account`/`Trader` in `engine/`) an independent auto-incrementing `id`.
 
 ### `engine/`
 
@@ -58,7 +58,10 @@ to be run from the repo root.
 - `broker.py` — receives orders via `msgq.py` message queues, computes a fill price
   (midpoint of the day's high/low), opens/closes `Position`s, checks stop-loss/
   take-profit levels against intraday high/low, and updates account balances.
-- `trader.py` — holds a `Strategy` and an `Account`, and submits orders.
+- `trader.py` — holds a `Strategy` and an `Account`, submits orders, and drains its
+  own order/close-order receipts each day (`process_receipts()`), logging a warning
+  for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
+  being silently discarded.
 - `strategy.py` — the one implemented strategy: buy/sell based on whether the closing
   price is above/below the 20-day moving average of daily highs, with fixed 0.5%/1%
   stop-loss/take-profit bands. On each new same-direction signal, it also submits
@@ -113,10 +116,11 @@ A position closes the same day one of the following happens, in this order:
 2. **Stop-loss** — intraday high/low reaches the order's `stop_loss` level.
 3. **Expiry** — `Order.expiry_date` is reached; settles at that day's closing price.
 4. **Explicit close** — a `CloseOrder` referencing the position's id is submitted;
-   settles at that day's midpoint execution price, same as opening a position.
-   `strategy.py` submits one of these automatically for each of its own open
-   positions that is in the money whenever a new same-direction signal fires,
-   rather than leaving them to run until stop-loss/take-profit/expiry.
+   settles at that day's midpoint execution price, same as opening a position. Only
+   the position's own trader may close it this way — a `CloseOrder` from another
+   trader is rejected. `strategy.py` submits one of these automatically for each of
+   its own open positions that is in the money whenever a new same-direction signal
+   fires, rather than leaving them to run until stop-loss/take-profit/expiry.
 
 ## Setup
 
@@ -136,9 +140,11 @@ command below, e.g. `PYTHONPATH=src python3 tests/run_tests.py -v`.
 python3 tests/run_tests.py -v
 ```
 
-The suite doesn't touch `datafeed.py`/`csvhandler.py` or any CSV file — it drives
-`Broker`/`Trader`/`Strategy`/`Account` directly against a `FakeDataFeed` test double
-defined in `tests/run_tests.py`, so it runs with no external data.
+Most of the suite drives `Broker`/`Trader`/`Strategy`/`Account` directly against a
+`FakeDataFeed` test double defined in `tests/run_tests.py`, so it needs no external
+data or CSV files. A couple of tests do exercise `csvhandler.py` directly against
+real (temporary, self-contained) CSV files — `datafeed.py`/`DataFeed` itself is
+still never touched, so no pre-existing data root is required either way.
 
 ## Data
 
