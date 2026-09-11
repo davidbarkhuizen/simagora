@@ -208,6 +208,9 @@ class Broker(object):
 
       if (pos is None) or (pos not in self.open_positions):
         receipt = OrderReceipt(close_order, 'position_not_open', 0, date, 0)
+      elif (close_order.trader_id != pos.order_receipt.order.trader_id):
+        # only the position's own trader may close it
+        receipt = OrderReceipt(close_order, 'not_authorized', 0, date, 0)
       else:
         order = pos.order_receipt.order
         exec_price = self.calc_execution_price(order.ins, order.buysell, date)
