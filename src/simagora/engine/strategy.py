@@ -47,15 +47,15 @@ class Strategy(object):
     mavg = self.datafeed.n_day_moving_avg(ins, date, 'high', n)    
     # compare to current price @ close
     cur_price = self.datafeed.get_price(ins, date, 'close')
-    
+
+    stop_loss_margin = Decimal(str(Strategy.stop_loss_margin))
+    take_profit_margin = Decimal(str(Strategy.take_profit_margin))
+
     if (cur_price > mavg): # +- tolerance
-      # SUBMIT NEW BUY ORDER      
-      stop_loss_margin = Decimal(str(Strategy.stop_loss_margin))
-      stop_loss_level = cur_price * (1 - stop_loss_margin)      
-      
-      take_profit_margin = Decimal(str(Strategy.take_profit_margin))
+      # SUBMIT NEW BUY ORDER
+      stop_loss_level = cur_price * (1 - stop_loss_margin)
       take_profit_level = cur_price * (1 + take_profit_margin)
-      
+
       buy_order = Order(ins, 'buy', 1, stop_loss_level, take_profit_level, date)
       self.submit_order(buy_order)
 
@@ -63,10 +63,7 @@ class Strategy(object):
       self.close_in_the_money_positions(date, 'buy')
     elif (cur_price < mavg):
        # SUBMIT NEW SELL ORDER
-      stop_loss_margin = Decimal(str(Strategy.stop_loss_margin))
       stop_loss_level = cur_price * (1 + stop_loss_margin)
-
-      take_profit_margin = Decimal(str(Strategy.take_profit_margin))
       take_profit_level = cur_price * (1 - take_profit_margin)
 
       sell_order = Order(ins, 'sell', 1, stop_loss_level, take_profit_level, date)
