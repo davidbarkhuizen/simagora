@@ -134,26 +134,31 @@ class Broker(object):
       idx = idx - 1
 
 # TAKE PROFIT, STOP LOSS, EXPIRE
-      
+
+  def _level_hit(self, pdata, level, rising_triggers):
+    '''
+    rising_triggers=True: level is hit by price rising (pdata['high'] >= level)
+    rising_triggers=False: level is hit by price falling (pdata['low'] <= level)
+    '''
+    if rising_triggers:
+      return pdata['high'] >= level
+    else:
+      return pdata['low'] <= level
+
   def profit_taken_on_position(self, date, pos, pdata):
     '''
     identify and effect take profit
     take profit on account
     '''
-    
-    trader = self.traders[pos.order_receipt.order.trader_id]
-    
-    if (pos.order_receipt.order.buysell == 'buy'):
-      if (pdata['high'] >= pos.order_receipt.order.take_profit):
-        # bank profit
-        trader.ac.take_profit(date, pos, pdata, 'buy')                
-        return True
-    else: # if sell
-      if (pdata['low'] <= pos.order_receipt.order.take_profit):
-        # bank profit
-        trader.ac.take_profit(date, pos, pdata, 'sell')
-        return True # signal to remove from message
-    
+    order = pos.order_receipt.order
+    rising_triggers = (order.buysell == 'buy')
+
+    if self._level_hit(pdata, order.take_profit, rising_triggers):
+      trader = self.traders[order.trader_id]
+      # bank profit
+      trader.ac.take_profit(date, pos, pdata, order.buysell)
+      return True
+
     return False
 
   def loss_taken_on_position(self, date, pos, pdata):
@@ -161,17 +166,14 @@ class Broker(object):
     identify and effect stop loss
     take loss on account
     '''
-    trader = self.traders[pos.order_receipt.order.trader_id]
-    
-    if (pos.order_receipt.order.buysell == 'buy'):
-      if (pdata['low'] <= pos.order_receipt.order.stop_loss):
-        trader.ac.stop_loss(date, pos, pdata, 'buy')                
-        return True
-    else: # if sell
-      if (pdata['high'] >= pos.order_receipt.order.stop_loss):
-        trader.ac.stop_loss(date, pos, pdata, 'sell')                
-        return True
-    
+    order = pos.order_receipt.order
+    rising_triggers = (order.buysell == 'sell')
+
+    if self._level_hit(pdata, order.stop_loss, rising_triggers):
+      trader = self.traders[order.trader_id]
+      trader.ac.stop_loss(date, pos, pdata, order.buysell)
+      return True
+
     return False
 
   def position_expired(self, pos, pdata, date):
