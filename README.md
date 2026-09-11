@@ -41,6 +41,8 @@ Per `initial_spec.txt`, the design has 3 conceptual agents:
 - `account.py` — per-trader cash/margin bookkeeping and P&L on position close.
 - `msgq.py` — a minimal in-memory message queue used to pass orders/receipts between
   trader and broker.
+- `run_tests.py` — the test suite (see Testing below); includes a `FakeDataFeed`
+  test double so it runs without any CSV data.
 - `arch.py` — a personal archiving script that shells out to `rar` to zip the source
   into a parent directory.
 
@@ -62,6 +64,19 @@ A position closes the same day one of the following happens, in this order:
 3. **Expiry** — `Order.expiry_date` is reached; settles at that day's closing price.
 4. **Explicit close** — a `CloseOrder` referencing the position's id is submitted;
    settles at that day's midpoint execution price, same as opening a position.
+   `strategy.py` submits one of these automatically for each of its own open
+   positions that is in the money whenever a new same-direction signal fires,
+   rather than leaving them to run until stop-loss/take-profit/expiry.
+
+## Testing
+
+```
+python3 run_tests.py -v
+```
+
+The suite doesn't touch `datafeed.py`/`csvhandler.py` or any CSV file — it drives
+`Broker`/`Trader`/`Strategy`/`Account` directly against a `FakeDataFeed` test double
+defined in `run_tests.py`, so it runs with no external data.
 
 ## Data
 
@@ -79,6 +94,26 @@ expected to have the columns `date, open, high, low, close, volume, adj_close`
 
 ## Running
 
-`launcher.py` shows the intended usage: construct a `Launcher`, call `go()` with a
-parameter dict specifying instrument, strategy, date range, and opening balance. See
-the Data section above for what `ins` needs to resolve to on disk before this will run.
+`launcher.py`'s `main()` shows the intended usage: construct a `Launcher`, call
+`go()` with a parameter dict specifying instrument, strategy, date range, and
+opening balance:
+
+```python
+from decimal import Decimal
+from datetime import date
+from launcher import Launcher
+
+Launcher().go({
+  'start_date': date(2008, 1, 1),
+  'end_date':   date(2008, 6, 30),
+  'ins':        'equity_index/^GSPC',  # resolved under the data root, see Data above
+  'strat':      'movavg',              # unused - Trader always loads strategy.Strategy
+  'open_bal':   Decimal('10000.00'),
+})
+```
+
+`go()` writes a run log to `log/` and a result plot (via matplotlib) to `plot/` —
+both directories are checked into the repo (empty, via `.gitkeep`) so this works
+out of the box; only a populated data root (see Data above) is required. The
+snippet above was run end-to-end against a synthetic CSV fixture to confirm it
+works before writing this section.
