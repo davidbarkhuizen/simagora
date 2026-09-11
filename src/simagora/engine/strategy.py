@@ -220,10 +220,94 @@ class MeanReversionStrategy(SingleInstrumentStrategy):
       self.submit_order(sell_order)
 
 
+class DualMomentumStrategy(MultiInstrumentStrategy):
+  '''
+  Dual Momentum (Antonacci-style) instrument rotation: ranks
+  trader.universe by their trailing lookback_window_days return
+  (relative momentum) and holds a single long position in the leader -
+  but only while the leader's own return is positive (absolute
+  momentum filter); otherwise rotates fully to cash rather than
+  holding a losing leader. Re-evaluated every day rather than the
+  classic monthly rebalance, but a leader already held is left alone
+  rather than churned, so a run of days with the same leader submits
+  no new orders.
+
+  No fixed take-profit - a position exits only when the leader changes
+  or absolute momentum turns negative - but every buy still carries a
+  protective stop_loss_margin band, since Broker.execute_orders_to_open
+  requires a stop_loss on every order to size margin.
+  '''
+
+  lookback_window_days = 20
+  stop_loss_margin = Decimal('0.05')  # 5 %
+
+  def rank_universe(self, date):
+    '''
+    {instrument: n_day_return} for every instrument in self.universe
+    with enough trailing history to have one; an instrument without
+    enough history yet is dropped rather than treated as the worst
+    performer, since "no history yet" isn't the same as "underperformed"
+    '''
+    returns = {}
+    for ins in self.universe:
+      ret = self.datafeed.n_day_return(ins, date, 'close', self.lookback_window_days)
+      if (ret is not None):
+        returns[ins] = ret
+    return returns
+
+  def open_buy_positions_by_instrument(self):
+    '''{instrument: [positions]} of this trader's own currently open buy positions'''
+    by_ins = {}
+    open_positions = self.trader.broker.get_open_positions_for_trader(self.trader.id)
+    for pos in open_positions:
+      order = pos.order_receipt.order
+      if (order.buysell == 'buy'):
+        by_ins.setdefault(order.ins, []).append(pos)
+    return by_ins
+
+  def close_positions(self, positions, date):
+    for pos in positions:
+      self.submit_order(CloseOrder(pos.id, date))
+
+  def execute(self, date):
+    returns = self.rank_universe(date)
+    open_by_ins = self.open_buy_positions_by_instrument()
+
+    if (len(returns) == 0):
+      # not enough trailing history anywhere yet
+      return
+
+    leader = max(returns, key=returns.get)
+
+    if (returns[leader] <= 0):
+      # ABSOLUTE MOMENTUM FILTER FAILED - rotate fully to cash
+      for positions in open_by_ins.values():
+        self.close_positions(positions, date)
+      return
+
+    if (leader in open_by_ins):
+      # already positioned in the leader - leave it running, but close
+      # any other open position left over from a since-changed leader
+      for ins, positions in open_by_ins.items():
+        if (ins != leader):
+          self.close_positions(positions, date)
+      return
+
+    # ROTATE INTO THE NEW LEADER
+    for positions in open_by_ins.values():
+      self.close_positions(positions, date)
+
+    cur_price = self.datafeed.get_price(leader, date, 'close')
+    stop_loss_level = cur_price * (1 - self.stop_loss_margin)
+    buy_order = Order(leader, 'buy', 1, stop_loss_level, None, date)
+    self.submit_order(buy_order)
+
+
 STRATEGY_REGISTRY = {
   'movavg': MovingAverageCrossoverStrategy,
   'trend': TrendFollowingStrategy,
   'meanreversion': MeanReversionStrategy,
+  'dualmomentum': DualMomentumStrategy,
 }
 
 DEFAULT_STRATEGY_NAME = 'movavg'
