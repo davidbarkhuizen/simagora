@@ -63,24 +63,9 @@ def row_to_dict(row):
 def load_csv_data_rows(path_to_csv):
   '''load specified csv file, return list of rows (including header row, if any)'''
 
-  csv_file = open(path_to_csv, 'r', newline='')
-
-  reader = csv.reader(csv_file)
-  csv_file = open(path_to_csv, 'r', newline='')
-
-  data_rows = []
-
-  line_count = 0
-  exit_loop = False;
-  while exit_loop == False:
-    try:
-      row = next(reader)
-      data_rows.append(row)
-      line_count += 1
-    except StopIteration:
-      exit_loop = True
-
-  csv_file.close()
+  with open(path_to_csv, 'r', newline='') as csv_file:
+    reader = csv.reader(csv_file)
+    data_rows = [row for row in reader]
 
   return data_rows
 
