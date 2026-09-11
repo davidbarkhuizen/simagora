@@ -10,7 +10,7 @@ folder_prefix = '../'
 fname = folder_prefix + ('%s_%s' % (appname, date_str))
 
 # run from the repo root
-arch_cmd = r'rar a -r %s src tests scripts *.md *.txt LICENSE' % fname
+arch_cmd = r'rar a -r %s src tests scripts *.md LICENSE' % fname
 
 print(arch_cmd)
 os.system(arch_cmd)
