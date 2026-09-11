@@ -10,14 +10,14 @@ class BaseStrategy(object):
   shared plumbing for every strategy below: trader/datafeed wiring,
   order submission, and logging the strategy's own source (all the
   concrete strategies live in this one file, so SOURCE_FILE_NAME is
-  shared too)
+  shared too). Doesn't say anything about what instrument(s) a
+  strategy trades - see SingleInstrumentStrategy/MultiInstrumentStrategy.
   '''
 
-  def __init__(self, trader, instrument, start_date, end_date):
+  def __init__(self, trader, start_date, end_date):
     self.trader = trader
     self.datafeed = trader.datafeed
 
-    self.instrument = instrument
     self.start_date = start_date
     self.end_date = end_date
 
@@ -36,7 +36,23 @@ class BaseStrategy(object):
     raise NotImplementedError
 
 
-class MovingAverageCrossoverStrategy(BaseStrategy):
+class SingleInstrumentStrategy(BaseStrategy):
+  '''a strategy that trades exactly trader.instrument'''
+
+  def __init__(self, trader, start_date, end_date):
+    BaseStrategy.__init__(self, trader, start_date, end_date)
+    self.instrument = trader.instrument
+
+
+class MultiInstrumentStrategy(BaseStrategy):
+  '''a strategy that trades across trader.universe'''
+
+  def __init__(self, trader, start_date, end_date):
+    BaseStrategy.__init__(self, trader, start_date, end_date)
+    self.universe = trader.universe
+
+
+class MovingAverageCrossoverStrategy(SingleInstrumentStrategy):
   '''
   buy when the closing price crosses above the n-day moving average of
   daily highs, sell when it crosses below; every new position carries
@@ -97,7 +113,7 @@ class MovingAverageCrossoverStrategy(BaseStrategy):
       pass
 
 
-class TrendFollowingStrategy(BaseStrategy):
+class TrendFollowingStrategy(SingleInstrumentStrategy):
   '''
   Donchian-channel breakout: buy when the close breaks above the high
   of the entry_window_days preceding days, sell when it breaks below
@@ -156,7 +172,7 @@ class TrendFollowingStrategy(BaseStrategy):
       self.close_positions_against_new_trend(date, 'sell')
 
 
-class MeanReversionStrategy(BaseStrategy):
+class MeanReversionStrategy(SingleInstrumentStrategy):
   '''
   Bollinger-Band mean reversion: buy when the close drops
   band_width_std_devs standard deviations below its own

@@ -58,6 +58,11 @@ class TestUniverse(unittest.TestCase):
     std = self.universe.n_day_std_dev('AAA', date(2010, 1, 1), 'close', 5)
     self.assertEqual(std, Decimal('0'))  # a single value has zero spread
 
+  def test_n_day_return_routes_correctly_too(self):
+    # AAA closes 102 (day1) -> 106 (day2)
+    ret = self.universe.n_day_return('AAA', date(2010, 1, 2), 'close', 1)
+    self.assertEqual(ret, (Decimal('106') - Decimal('102')) / Decimal('102'))
+
   def test_unknown_instrument_raises_a_clear_error(self):
     with self.assertRaises(ValueError):
       self.universe.get_price('CCC', date(2010, 1, 1), 'close')

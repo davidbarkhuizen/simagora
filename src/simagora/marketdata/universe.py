@@ -42,6 +42,9 @@ class Universe(object):
   def n_day_std_dev(self, instrument, date, price, n):
     return self._feed_for(instrument).n_day_std_dev(instrument, date, price, n)
 
+  def n_day_return(self, instrument, date, price, n):
+    return self._feed_for(instrument).n_day_return(instrument, date, price, n)
+
   def date_is_trading_day(self, date):
     '''union semantics: true if ANY instrument in the universe trades this date'''
     for feed in self.feeds.values():

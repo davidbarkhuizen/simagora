@@ -75,6 +75,19 @@ class TestDataFeed(unittest.TestCase):
     std = self.datafeed.n_day_std_dev(self.instrument, date(2010, 1, 3), 'close', 3)
     self.assertAlmostEqual(float(std), (Decimal(8) / Decimal(3)).sqrt().__float__(), places=9)
 
+  def test_n_day_return_over_available_history(self):
+    # close on day4 (106) vs close 3 trading days earlier, day1 (100)
+    ret = self.datafeed.n_day_return(self.instrument, date(2010, 1, 4), 'close', 3)
+    self.assertEqual(ret, Decimal('0.06'))
+
+  def test_n_day_return_of_zero_days_back_is_zero(self):
+    ret = self.datafeed.n_day_return(self.instrument, date(2010, 1, 3), 'close', 0)
+    self.assertEqual(ret, Decimal('0'))
+
+  def test_n_day_return_returns_none_without_enough_preceding_history(self):
+    # the very first day has no preceding day to compare against
+    self.assertIsNone(self.datafeed.n_day_return(self.instrument, date(2010, 1, 1), 'close', 1))
+
 
 if __name__ == '__main__':
   unittest.main()

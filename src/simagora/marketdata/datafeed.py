@@ -14,6 +14,13 @@ class DataFeed(object):
     self.data_root = data_root if (data_root is not None) else DEFAULT_DATA_ROOT
     self.subscribe_to_price_feed_for_instrument(instrument)
   
+  def _index_of(self, date):
+    '''index of date in self.feed, or -1 if it isn't a trading day'''
+    for i in range(len(self.feed)):
+      if (self.feed[i]['date'] == date):
+        return i
+    return -1
+
   def _trailing_values(self, date, price, n, include_current):
     '''
     up to n values of `price`, trading days only, ending at date.
@@ -22,12 +29,7 @@ class DataFeed(object):
     needed for a breakout/extreme check, where date's own bar would
     otherwise always be part of (and so never exceed) its own extreme
     '''
-    j = -1
-    for i in range(len(self.feed)):
-      if (self.feed[i]['date'] == date):
-        j = i
-        break
-
+    j = self._index_of(date)
     start = j if include_current else (j - 1)
 
     values = []
@@ -36,6 +38,14 @@ class DataFeed(object):
       if (idx >= 0):
         values.append(self.feed[idx][price])
     return values
+
+  def _value_n_days_before(self, date, price, n):
+    '''value of `price` n trading days before date (n=0 is date's own value); None if unavailable'''
+    j = self._index_of(date)
+    idx = j - n
+    if (idx < 0):
+      return None
+    return self.feed[idx][price]
 
   def n_day_moving_avg(self, instrument, date, price, n):
     '''
@@ -68,6 +78,18 @@ class DataFeed(object):
     mean = sum(values) / Decimal(len(values))
     variance = sum((v - mean) ** 2 for v in values) / Decimal(len(values))
     return variance.sqrt()
+
+  def n_day_return(self, instrument, date, price, n):
+    '''
+    fractional return of `price` from n trading days before date to
+    date itself, e.g. 0.05 for a 5% gain; None if there isn't n days
+    of preceding history yet (or the value n days ago was exactly 0)
+    '''
+    today_value = self._value_n_days_before(date, price, 0)
+    past_value = self._value_n_days_before(date, price, n)
+    if (today_value is None) or (past_value is None) or (past_value == 0):
+      return None
+    return (today_value - past_value) / past_value
 
   def get_price(self, instrument, date, price):
     for i in self.feed:
