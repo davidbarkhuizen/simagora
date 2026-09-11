@@ -158,7 +158,8 @@ Launcher().go({
   'start_date': date(2008, 1, 1),
   'end_date':   date(2008, 6, 30),
   'ins':        'equity_index/^GSPC',  # resolved under the data root, see Data above
-  'strat':      'movavg',              # unused - Trader always loads strategy.Strategy
+  'strat':      ['movavg'],  # a list - one Trader per element; the string itself is
+                              # unused (Trader always loads strategy.Strategy)
   'open_bal':   Decimal('10000.00'),
 })
 ```

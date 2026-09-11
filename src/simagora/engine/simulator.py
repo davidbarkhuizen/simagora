@@ -20,7 +20,11 @@ class Simulator(object):
     '''
     constructs message queues
     initialises brokers and traders
-    '''    
+
+    strategies must be a list (one Trader is created per element,
+    e.g. ['movavg'] for a single trader) - a bare string will silently
+    create one trader per character in the string
+    '''
     self.instrument = instrument
     
     self.start_date = start_date

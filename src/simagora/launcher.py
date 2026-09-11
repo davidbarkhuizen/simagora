@@ -54,7 +54,7 @@ def main():
     # equity/JPM
     # equity_index/
   'ins' : 'equity_index/^GSPC',
-  'strat' : 'movavg',
+  'strat' : ['movavg'],
   'open_bal' : Decimal('10000.00')
   }  
   
