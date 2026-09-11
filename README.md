@@ -65,18 +65,20 @@ to be run from the repo root.
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
   being silently discarded.
-- `strategy.py` — the one implemented strategy, `MovingAverageCrossoverStrategy`:
-  buy/sell based on whether the closing price is above/below the 20-day moving
-  average of daily highs, with fixed 0.5%/1% stop-loss/take-profit bands. On each
-  new same-direction signal, it also submits `CloseOrder`s for any of its own open
-  positions, in that direction, that are currently in the money.
+- `strategy.py` — three strategies, all sharing `BaseStrategy` for trader/datafeed
+  wiring, order submission, and `log_self()`. Selected by name (see Strategies below)
+  via `STRATEGY_REGISTRY`/`resolve_strategy_class()`, which `Trader.load_strategy()`
+  calls with the `strategy_name` it was constructed with.
 - `simulator.py` — drives the day-by-day simulation loop between a start and end date.
 
 ### `marketdata/`
 
 - `csvhandler.py` — parses OHLCV CSV rows into `Decimal`-typed dicts.
 - `datafeed.py` — loads daily OHLCV CSV data for an instrument and exposes price
-  lookups and n-day moving averages (see Data below for where it reads from).
+  lookups, n-day moving averages, n-day highs/lows (used for breakout signals -
+  these exclude the given date itself, since a value is always part of its own
+  running extreme), and n-day standard deviation (used for Bollinger-Band-style
+  bands). See Data below for where it reads from.
 
 ### `reporting/`
 
@@ -111,19 +113,52 @@ their content lives here, so it isn't duplicated in two places).
   between the two.
 - `user_notes.txt` was always empty — nothing to carry over.
 
+## Strategies
+
+Selected by the `strat` list passed to `Launcher()`/`Simulator()` (see Running
+below) — each element is a registry name, looked up in `strategy.STRATEGY_REGISTRY`:
+
+- **`'movavg'`** — `MovingAverageCrossoverStrategy`. Buy/sell based on whether the
+  closing price is above/below the 20-day moving average of daily highs, with fixed
+  0.5%/1% stop-loss/take-profit bands. On each new same-direction signal, it also
+  submits `CloseOrder`s for any of its own open positions, in that direction, that
+  are currently in the money (see Position closing below).
+- **`'trend'`** — `TrendFollowingStrategy`. A Donchian-channel breakout: buy when
+  the close breaks above the high of the preceding 20 days, sell when it breaks
+  below their low. Stop-loss sits at the shorter 10-day low/high (the classic
+  Turtle-style dual channel); there is deliberately no take-profit (`Order`'s
+  `take_profit` can be `None` — `Broker.profit_taken_on_position` treats that as
+  "never triggers"), since trend-following aims to let a winning position run until
+  it's stopped out or the trend reverses. A fresh breakout also closes any of the
+  trader's own open positions in the *opposite* direction.
+- **`'meanreversion'`** — `MeanReversionStrategy`. Bollinger-Band mean reversion:
+  buy when the close drops 2 standard deviations below its own 20-day moving
+  average (oversold), sell when it rises the same distance above it (overbought),
+  each with fixed 1%/2% stop-loss/take-profit bands. No position-management beyond
+  that — a reversion trade is meant to be quick.
+
+An unrecognized name raises `ValueError` rather than silently falling back to a
+default, so a typo doesn't quietly run the wrong strategy; `None` (what every
+`Trader`-constructing test in this repo passes, since they don't care which
+strategy loads) resolves to `'movavg'`.
+
 ## Position closing
 
 A position closes the same day one of the following happens, in this order:
 
 1. **Take-profit** — intraday high/low reaches the order's `take_profit` level.
+   Never triggers if `take_profit` is `None` (`TrendFollowingStrategy`'s positions).
 2. **Stop-loss** — intraday high/low reaches the order's `stop_loss` level.
 3. **Expiry** — `Order.expiry_date` is reached; settles at that day's closing price.
 4. **Explicit close** — a `CloseOrder` referencing the position's id is submitted;
    settles at that day's midpoint execution price, same as opening a position. Only
    the position's own trader may close it this way — a `CloseOrder` from another
-   trader is rejected. `strategy.py` submits one of these automatically for each of
-   its own open positions that is in the money whenever a new same-direction signal
-   fires, rather than leaving them to run until stop-loss/take-profit/expiry.
+   trader is rejected. `MovingAverageCrossoverStrategy` submits one of these
+   automatically for each of its own open positions that is in the money whenever a
+   new same-direction signal fires; `TrendFollowingStrategy` submits one for each of
+   its own open positions in the *opposite* direction whenever a fresh breakout
+   fires. Either way this happens rather than leaving the position to run until
+   stop-loss/take-profit/expiry.
 
 ## Setup
 
@@ -145,10 +180,10 @@ python3 tests/run_tests.py -v
 
 Most of the suite drives `Broker`/`Trader`/`Strategy`/`Account` directly against a
 `FakeDataFeed` test double defined in `tests/testutil.py`, so it needs no external
-data or CSV files. A couple of tests (in `test_csvhandler.py`) do exercise
-`csvhandler.py` directly against
-real (temporary, self-contained) CSV files — `datafeed.py`/`DataFeed` itself is
-still never touched, so no pre-existing data root is required either way.
+data or CSV files. A couple of tests (in `test_csvhandler.py` and `test_datafeed.py`)
+do exercise `csvhandler.py`/the real `DataFeed` directly against real (temporary,
+self-contained) CSV files — no pre-existing data root is required either way, since
+those tests point `DataFeed` at their own fixture via its `data_root` argument.
 
 ## Data
 
@@ -179,8 +214,8 @@ Launcher().go({
   'start_date': date(2008, 1, 1),
   'end_date':   date(2008, 6, 30),
   'ins':        'equity_index/^GSPC',  # resolved under the data root, see Data above
-  'strat':      ['movavg'],  # a list - one Trader per element; the string itself is
-                              # unused (Trader always loads MovingAverageCrossoverStrategy)
+  'strat':      ['movavg'],  # a list - one Trader per element; each name is looked
+                              # up in strategy.STRATEGY_REGISTRY (see Strategies above)
   'open_bal':   Decimal('10000.00'),
 })
 ```

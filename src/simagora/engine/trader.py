@@ -1,4 +1,4 @@
-from .strategy import MovingAverageCrossoverStrategy
+from .strategy import resolve_strategy_class
 from ..domain.autoid import HasAutoId
 import logging
 
@@ -6,33 +6,37 @@ class Trader(HasAutoId):
   '''
   '''
 
-  def __init__(self, datafeed, broker, opening_bal, instrument, strategy, start_date, end_date):
+  def __init__(self, datafeed, broker, opening_bal, instrument, strategy_name, start_date, end_date):
     '''
-    '''    
+    strategy_name is looked up in strategy.STRATEGY_REGISTRY by
+    load_strategy() below; None resolves to the registry's default
+    '''
     self.id = Trader.new_id()
-    
-    self.instrument = instrument    
+
+    self.instrument = instrument
     self.start_date = start_date
-    self.end_date = end_date        
+    self.end_date = end_date
     self.datafeed = datafeed
 
     self.opening_bal = opening_bal
-    
-    self.broker = broker    
+
+    self.broker = broker
     self.orderQ = None
     self.receiptQ = None
     self.term_req_Q = None
-    self.term_notice_Q = None    
+    self.term_notice_Q = None
     self.broker.register_trader(self)
-    
+
     self.order_receipts = []
-    self.load_strategy()    
+    self.strategy_name = strategy_name
+    self.load_strategy()
 
   def load_strategy(self):
     '''
     called by simulator
     '''
-    self.strategy = MovingAverageCrossoverStrategy(self, self.instrument, self.start_date, self.end_date)
+    strategy_class = resolve_strategy_class(self.strategy_name)
+    self.strategy = strategy_class(self, self.instrument, self.start_date, self.end_date)
   def submit_order(self, order):
     '''
     submit order to broker for execution
