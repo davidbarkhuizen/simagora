@@ -2,13 +2,13 @@ import unittest
 from decimal import Decimal
 from datetime import date
 
-from broker import Broker
-from msgq import MsgQ
-from order import Order
-from closeorder import CloseOrder
-from trader import Trader
-from orderreceipt import OrderReceipt
-from position import Position
+from simagora.engine.broker import Broker
+from simagora.engine.msgq import MsgQ
+from simagora.engine.trader import Trader
+from simagora.domain.order import Order
+from simagora.domain.closeorder import CloseOrder
+from simagora.domain.orderreceipt import OrderReceipt
+from simagora.domain.position import Position
 
 
 class FakeDataFeed(object):

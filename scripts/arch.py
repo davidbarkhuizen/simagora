@@ -9,7 +9,8 @@ date_str = '%d-%d-%d-%d-%d' % (now.year, now.month, now.day, now.hour, now.minut
 folder_prefix = '../'
 fname = folder_prefix + ('%s_%s' % (appname, date_str))
 
-arch_cmd = r'rar a -r %s *.py *.txt' % fname
- 
+# run from the repo root
+arch_cmd = r'rar a -r %s src tests scripts *.md *.txt LICENSE' % fname
+
 print(arch_cmd)
 os.system(arch_cmd)

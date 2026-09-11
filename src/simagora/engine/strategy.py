@@ -1,9 +1,9 @@
-from order import Order
-from closeorder import CloseOrder
+from ..domain.order import Order
+from ..domain.closeorder import CloseOrder
 from decimal import *
 import logging
 
-SOURCE_FILE_NAME = 'strategy.py'
+SOURCE_FILE_NAME = __file__
 
 class Strategy(object):
   

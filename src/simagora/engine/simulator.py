@@ -1,9 +1,9 @@
 from datetime import *
-from datafeed import DataFeed
-from broker import Broker
-from trader import Trader
-from strategy import Strategy
-from msgq import MsgQ
+from ..marketdata.datafeed import DataFeed
+from .broker import Broker
+from .trader import Trader
+from .strategy import Strategy
+from .msgq import MsgQ
 # ------------------
 import datetime
 import numpy as np

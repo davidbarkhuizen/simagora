@@ -2,8 +2,7 @@ import logging
 from datetime import *
 from time import perf_counter as clock
 from decimal import Decimal
-from simulator import Simulator
-from strategy import Strategy
+from .engine.simulator import Simulator
 
 LOG_FILE_PATH = 'log/'
 LOG_FILENAME = 'run_'

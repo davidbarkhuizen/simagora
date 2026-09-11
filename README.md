@@ -17,34 +17,73 @@ Per `initial_spec.txt`, the design has 3 conceptual agents:
    maintains the trader's account (cash balance, margin, open/closed positions).
 3. **Data provider** — supplies market data.
 
-## Architecture
+## Layout
 
-- `datafeed.py` — loads daily OHLCV CSV data (via `csvhandler.py`) for an instrument
-  and exposes price lookups and n-day moving averages.
-- `trader.py` — holds a `Strategy` and an `Account`, and submits orders.
-- `broker.py` — receives orders via `msgq.py` message queues, computes a fill price
-  (midpoint of the day's high/low), opens/closes `Position`s, checks stop-loss/
-  take-profit levels against intraday high/low, and updates account balances.
-- `strategy.py` — the one implemented strategy: buy/sell based on whether the closing
-  price is above/below the 20-day moving average of daily highs, with fixed 0.5%/1%
-  stop-loss/take-profit bands. On each new same-direction signal, it also submits
-  `CloseOrder`s for any of its own open positions, in that direction, that are
-  currently in the money.
-- `simulator.py` / `launcher.py` — drive the day-by-day simulation loop between a
-  start and end date, then plot results with matplotlib (`plot.py`).
+```
+src/simagora/
+  domain/       order data model - independent of simulation mechanics
+  engine/       simulation mechanics - orchestration and execution
+  marketdata/   CSV-backed historical price data access
+  reporting/    plotting helpers
+  launcher.py   entry point (Launcher, main())
+  timer.py      small perf-timing helper (mostly unused, see below)
+tests/
+  run_tests.py  the test suite
+scripts/
+  arch.py       personal archiving utility (unrelated to the simulator itself)
+```
+
+`src/` is a standard Python "src layout": the package isn't importable straight out
+of a checkout, it must be installed first (see Setup below). This is deliberate -
+it's what catches packaging mistakes (a module missing from the package, a stray
+import that only works by accident because of the working directory) before they
+reach a real install, rather than papering over them because the interpreter happens
+to be run from the repo root.
+
+### `domain/`
+
 - `order.py` — an order to open a new position (buy/sell, quantity, stop-loss,
   take-profit, optional expiry date).
 - `closeorder.py` — an order to close a specific already-open position by id,
   independent of stop-loss/take-profit/expiry.
 - `orderreceipt.py`, `position.py`, `termnotice.py` — simple data/record classes
   used to track fills, open positions, and position termination.
-- `account.py` — per-trader cash/margin bookkeeping and P&L on position close.
+
+### `engine/`
+
 - `msgq.py` — a minimal in-memory message queue used to pass orders/receipts between
   trader and broker.
-- `run_tests.py` — the test suite (see Testing below); includes a `FakeDataFeed`
-  test double so it runs without any CSV data.
-- `arch.py` — a personal archiving script that shells out to `rar` to zip the source
-  into a parent directory.
+- `account.py` — per-trader cash/margin bookkeeping and P&L on position close.
+- `broker.py` — receives orders via `msgq.py` message queues, computes a fill price
+  (midpoint of the day's high/low), opens/closes `Position`s, checks stop-loss/
+  take-profit levels against intraday high/low, and updates account balances.
+- `trader.py` — holds a `Strategy` and an `Account`, and submits orders.
+- `strategy.py` — the one implemented strategy: buy/sell based on whether the closing
+  price is above/below the 20-day moving average of daily highs, with fixed 0.5%/1%
+  stop-loss/take-profit bands. On each new same-direction signal, it also submits
+  `CloseOrder`s for any of its own open positions, in that direction, that are
+  currently in the money.
+- `simulator.py` — drives the day-by-day simulation loop between a start and end date.
+
+### `marketdata/`
+
+- `csvhandler.py` — parses OHLCV CSV rows into `Decimal`-typed dicts.
+- `datafeed.py` — loads daily OHLCV CSV data for an instrument and exposes price
+  lookups and n-day moving averages (see Data below for where it reads from).
+
+### `reporting/`
+
+- `plot.py` — matplotlib plotting helpers. Currently unused/orphaned: nothing in
+  `engine/` or `launcher.py` calls into it - `Simulator.plot()` does its own inline
+  matplotlib plotting instead. It also has a function (`gen_plot_png_for_symbol_period`)
+  that references Django ORM models (`Symbol`, `DailyCandleSticks`) that don't exist
+  anywhere in this repo, evidently a leftover from a different, related project.
+
+### Top level
+
+- `launcher.py` — `Launcher`/`main()`, the intended entry point; see Running below.
+- `timer.py` — a small perf-timing helper; its one class is entirely commented out,
+  so today this module only re-exports `time.perf_counter` as `clock`.
 
 ## Notes and design docs
 
@@ -68,24 +107,36 @@ A position closes the same day one of the following happens, in this order:
    positions that is in the money whenever a new same-direction signal fires,
    rather than leaving them to run until stop-loss/take-profit/expiry.
 
+## Setup
+
+The package needs to be installed (editable is fine) before it can be imported,
+since `src/` isn't on `sys.path` by default:
+
+```
+pip install -e .
+```
+
+If you'd rather not install anything, point `PYTHONPATH` at `src/` instead for any
+command below, e.g. `PYTHONPATH=src python3 tests/run_tests.py -v`.
+
 ## Testing
 
 ```
-python3 run_tests.py -v
+python3 tests/run_tests.py -v
 ```
 
 The suite doesn't touch `datafeed.py`/`csvhandler.py` or any CSV file — it drives
 `Broker`/`Trader`/`Strategy`/`Account` directly against a `FakeDataFeed` test double
-defined in `run_tests.py`, so it runs with no external data.
+defined in `tests/run_tests.py`, so it runs with no external data.
 
 ## Data
 
-`DataFeed` (`datafeed.py`) reads daily OHLCV data from
+`DataFeed` (`marketdata/datafeed.py`) reads daily OHLCV data from
 `<instrument>.csv` under a data root directory, resolved in this order:
 
 1. the `data_root` argument passed to `DataFeed(instrument, data_root=...)`,
 2. the `SIMAGORA_DATA_ROOT` environment variable,
-3. a `data/csv/` directory alongside the source files, by default.
+3. `data/csv/` under the current working directory, by default.
 
 No sample data ships with this repository, so a data root must be populated
 (or pointed at via `SIMAGORA_DATA_ROOT`) before the simulator can run. Each CSV is
@@ -101,7 +152,7 @@ opening balance:
 ```python
 from decimal import Decimal
 from datetime import date
-from launcher import Launcher
+from simagora.launcher import Launcher
 
 Launcher().go({
   'start_date': date(2008, 1, 1),
@@ -112,8 +163,10 @@ Launcher().go({
 })
 ```
 
-`go()` writes a run log to `log/` and a result plot (via matplotlib) to `plot/` —
-both directories are checked into the repo (empty, via `.gitkeep`) so this works
-out of the box; only a populated data root (see Data above) is required. The
-snippet above was run end-to-end against a synthetic CSV fixture to confirm it
-works before writing this section.
+Run from the repo root (or wherever you want `data/`, `log/`, and `plot/` resolved
+relative to) after completing Setup above. `go()` writes a run log to `log/` and a
+result plot (via matplotlib) to `plot/` — both directories are checked into the repo
+(empty, via `.gitkeep`) so this works out of the box; only a populated data root (see
+Data above) is required. The snippet above was run end-to-end against a synthetic CSV
+fixture, from both an editable install and a `PYTHONPATH=src` invocation, to confirm
+it works before writing this section.
