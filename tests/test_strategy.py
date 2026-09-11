@@ -72,5 +72,27 @@ class TestStrategyCloseInTheMoneyPositions(unittest.TestCase):
     self.assertEqual(close_orders[0].position_id, pos.id)
 
 
+class TestStrategyLogSelf(unittest.TestCase):
+
+  def setUp(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q,
+     self.broker, self.trader) = make_broker_and_trader(
+        datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+
+  def test_logs_its_own_source_without_truncating_lines(self):
+    # previously trimmed the last 2 characters of every line assuming
+    # CRLF endings, but the file uses LF - dropping the real last
+    # character of every logged line (readline() already strips
+    # nothing but the single trailing '\n')
+    with self.assertLogs(level='INFO') as captured:
+      self.trader.strategy.log_self()
+
+    self.assertIn(
+      'class MovingAverageCrossoverStrategy(object):',
+      [record.getMessage() for record in captured.records],
+    )
+
+
 if __name__ == '__main__':
   unittest.main()

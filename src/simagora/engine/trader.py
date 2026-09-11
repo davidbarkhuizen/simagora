@@ -1,4 +1,4 @@
-from .strategy import Strategy
+from .strategy import MovingAverageCrossoverStrategy
 from ..domain.autoid import HasAutoId
 import logging
 
@@ -32,7 +32,7 @@ class Trader(HasAutoId):
     '''
     called by simulator
     '''
-    self.strategy = Strategy(self, self.instrument, self.start_date, self.end_date)  
+    self.strategy = MovingAverageCrossoverStrategy(self, self.instrument, self.start_date, self.end_date)
   def submit_order(self, order):
     '''
     submit order to broker for execution
