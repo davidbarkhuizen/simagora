@@ -29,7 +29,10 @@ src/simagora/
   launcher.py   entry point (Launcher, main())
   timer.py      small perf-timing helper (mostly unused, see below)
 tests/
-  run_tests.py  the test suite
+  run_tests.py  discovers and runs every test_*.py file below
+  testutil.py   shared test doubles/factories (FakeDataFeed, broker/trader
+                construction helpers) and constants used across test_*.py
+  test_*.py     one file per module under test, e.g. test_broker.py
 ```
 
 `src/` is a standard Python "src layout": the package isn't importable straight out
@@ -141,8 +144,9 @@ python3 tests/run_tests.py -v
 ```
 
 Most of the suite drives `Broker`/`Trader`/`Strategy`/`Account` directly against a
-`FakeDataFeed` test double defined in `tests/run_tests.py`, so it needs no external
-data or CSV files. A couple of tests do exercise `csvhandler.py` directly against
+`FakeDataFeed` test double defined in `tests/testutil.py`, so it needs no external
+data or CSV files. A couple of tests (in `test_csvhandler.py`) do exercise
+`csvhandler.py` directly against
 real (temporary, self-contained) CSV files — `datafeed.py`/`DataFeed` itself is
 still never touched, so no pre-existing data root is required either way.
 
