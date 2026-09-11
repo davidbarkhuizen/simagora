@@ -49,22 +49,26 @@ Per `initial_spec.txt`, the design has 3 conceptual agents:
 
 ## Known issues / limitations
 
-- **Python 2 only.** Uses constructs removed in Python 3 (`except Exception, e:`,
-  `from time import clock`, `reader.next()`). Will not run under Python 3 as-is.
-- **Hardcoded data path.** `datafeed.py` reads CSV data from the absolute path
-  `/home/david/pycode/mp/data/csv/<instrument>.csv`, which is not part of this
-  repository — a data directory must exist at that path for anything to run.
-- **Broken test file.** `run_tests.py` imports `openorder.py` / `closeorder.py`,
-  which do not exist in this repo (the real order class is `Order` in `order.py`).
-- **Bug in `account.py`.** `Account.handle_expiry` references a `pos` variable that
-  is never passed in as a parameter.
 - **Unimplemented features.** `Broker.execute_orders_to_close` raises
   `NotImplementedError`, and `Broker.position_expired` is stubbed to always return
   `False` — positions can currently only close via stop-loss or take-profit.
 
+## Data
+
+`DataFeed` (`datafeed.py`) reads daily OHLCV data from
+`<instrument>.csv` under a data root directory, resolved in this order:
+
+1. the `data_root` argument passed to `DataFeed(instrument, data_root=...)`,
+2. the `SIMAGORA_DATA_ROOT` environment variable,
+3. a `data/csv/` directory alongside the source files, by default.
+
+No sample data ships with this repository, so a data root must be populated
+(or pointed at via `SIMAGORA_DATA_ROOT`) before the simulator can run. Each CSV is
+expected to have the columns `date, open, high, low, close, volume, adj_close`
+(see `csvhandler.py`).
+
 ## Running
 
-There is no working entry point in the current state of the repo (see Known issues
-above). `launcher.py` shows the intended usage: construct a `Launcher`, call `go()`
-with a parameter dict specifying instrument, strategy, date range, and opening
-balance.
+`launcher.py` shows the intended usage: construct a `Launcher`, call `go()` with a
+parameter dict specifying instrument, strategy, date range, and opening balance. See
+the Data section above for what `ins` needs to resolve to on disk before this will run.
