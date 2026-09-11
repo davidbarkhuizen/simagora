@@ -53,7 +53,7 @@ class Simulator(object):
     
     length = self.end_date - self.start_date
     d_total = length.days
-    display_int = d_total / 10
+    display_int = d_total // 10
       
     while (current_date <= self.end_date):    
       

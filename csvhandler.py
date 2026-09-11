@@ -32,9 +32,9 @@ def parse_string_to_date(date_str):
     y = int(tokens[0].lstrip('0'))
     m = int(tokens[1].lstrip('0'))
     d = int(tokens[2].lstrip('0'))
-    return datetime.date(y, m, d)  
-  except Exception, e:
-    return None  
+    return datetime.date(y, m, d)
+  except Exception as e:
+    return None
     
 def row_to_dict(row):
   '''return dict with keys [date, open, high, low, close, volume, adj_close]'''
@@ -62,10 +62,10 @@ def row_to_dict(row):
 def load_csv_data_rows(path_to_csv):
   '''load specified csv file, return list of rows (including header row, if any)'''
 
-  csv_file = open(path_to_csv, 'r')
-  
+  csv_file = open(path_to_csv, 'r', newline='')
+
   reader = csv.reader(csv_file)
-  csv_file = open(path_to_csv, 'r')
+  csv_file = open(path_to_csv, 'r', newline='')
 
   data_rows = []
 
@@ -73,7 +73,7 @@ def load_csv_data_rows(path_to_csv):
   exit_loop = False;
   while exit_loop == False:
     try:
-      row = reader.next()
+      row = next(reader)
       data_rows.append(row)
       line_count += 1
     except StopIteration:

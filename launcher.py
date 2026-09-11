@@ -1,6 +1,6 @@
 import logging
 from datetime import *
-from time import clock
+from time import perf_counter as clock
 from decimal import Decimal
 from simulator import Simulator
 from strategy import Strategy
