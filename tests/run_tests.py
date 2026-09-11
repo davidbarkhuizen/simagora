@@ -76,6 +76,49 @@ class TestOrderQFilter(unittest.TestCase):
     self.assertEqual(count, 3)
 
 
+class TestExecuteOrdersToOpen(unittest.TestCase):
+
+  def setUp(self):
+    self.day1 = date(2010, 1, 1)
+
+  def test_rejects_order_that_gapped_through_its_own_stop_loss(self):
+    # a buy order set yesterday with stop_loss=90, but today's exec
+    # price (midpoint of high/low) gaps down to 75 - already past the
+    # order's own stop
+    datafeed = FakeDataFeed({
+      self.day1: {'high': Decimal('80'), 'low': Decimal('70'), 'close': Decimal('75')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', self.day1, self.day1)
+
+    order = Order('s&p500', 'buy', 1, Decimal('90'), Decimal('110'), self.day1)
+    trader.submit_order(order)
+    broker.execute_orders_to_open(self.day1)
+
+    self.assertEqual(len(broker.open_positions), 0)
+    self.assertEqual(trader.ac.cash_bal, Decimal('10000'))
+    self.assertEqual(trader.ac.margin_bal, Decimal('0'))
+
+    receipt = receiptQ.get()
+    self.assertEqual(receipt.status, 'gapped_through_stop_loss')
+
+  def test_opens_normally_when_exec_price_has_not_gapped_through_stop(self):
+    datafeed = FakeDataFeed({
+      self.day1: {'high': Decimal('105'), 'low': Decimal('95'), 'close': Decimal('100')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', self.day1, self.day1)
+
+    order = Order('s&p500', 'buy', 1, Decimal('90'), Decimal('110'), self.day1)
+    trader.submit_order(order)
+    broker.execute_orders_to_open(self.day1)
+
+    self.assertEqual(len(broker.open_positions), 1)
+    # exec price = (105+95)/2 = 100, margin = 100-90 = 10
+    self.assertEqual(trader.ac.cash_bal, Decimal('9990'))
+    self.assertEqual(trader.ac.margin_bal, Decimal('10'))
+
+
 class TestExecuteOrdersToClose(unittest.TestCase):
 
   def setUp(self):
