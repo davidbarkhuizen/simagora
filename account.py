@@ -74,14 +74,14 @@ class Account(object):
     # logging.info('%s,%s,%s,%s,%s' % (str(date), self.cash_bal, self.margin_bal, self.net_booked_position, pos.close_str()))    
 
 
-  def handle_expiry(self, date, pdata, buysell):
+  def handle_expiry(self, date, pos, pdata, buysell):
     '''
     '''
     margin = pos.order_receipt.margin
     order = pos.order_receipt.order
-    receipt = pos.order_receipt    
-    
-    pdelta = math.fabs(receipt.execution_price - pdata['close'])
+    receipt = pos.order_receipt
+
+    pdelta = abs(receipt.execution_price - pdata['close'])
     
     if (buysell == 'buy'):
       if (receipt.execution_price <= pdata['close']):
@@ -109,7 +109,7 @@ class Account(object):
       
       # record profit
       self.net_booked_position = self.net_booked_position + profit
-      pos.history[pdata['date']] = profit
+      pos.history[date] = profit
       
       delta = profit
       reason = 'expired in the money'
@@ -128,7 +128,7 @@ class Account(object):
       
       # record loss
       self.net_booked_position = self.net_booked_position - loss
-      pos.history[pdata['date']] = loss
+      pos.history[date] = loss
       
       delta = Decimal(0) - loss      
       reason = 'expired out of the money'    
