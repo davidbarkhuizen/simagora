@@ -74,6 +74,37 @@ class Account(object):
     # logging.info('%s,%s,%s,%s,%s' % (str(date), self.cash_bal, self.margin_bal, self.net_booked_position, pos.close_str()))    
 
 
+  def close_at_price(self, date, pos, price, buysell):
+    '''
+    close a position at an arbitrary execution price (e.g. a
+    strategy-issued close order), banking whatever profit or loss
+    that price implies relative to the position's execution price
+    '''
+    margin = pos.order_receipt.margin
+    order = pos.order_receipt.order
+    receipt = pos.order_receipt
+
+    if (buysell == 'buy'):
+      pdelta = price - receipt.execution_price
+    else: # sell
+      pdelta = receipt.execution_price - price
+
+    # free margin
+    self.margin_bal -= margin
+    self.cash_bal += margin
+
+    # profit or loss
+    pnl = pdelta * order.leverage
+    self.cash_bal = self.cash_bal + pnl
+    self.net_booked_position = self.net_booked_position + pnl
+
+    # record profit/loss
+    pos.history[date] = pnl
+    pos.term_notice = TermNotice(date, price, pos.id, 'closed_by_order', pnl)
+
+    # cash_bal, margin_bal, net_booked_position
+    # logging.info('%s,%s,%s,%s,%s' % (str(date), self.cash_bal, self.margin_bal, self.net_booked_position, pos.close_str()))
+
   def handle_expiry(self, date, pos, pdata, buysell):
     '''
     '''

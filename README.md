@@ -27,11 +27,15 @@ Per `initial_spec.txt`, the design has 3 conceptual agents:
   take-profit levels against intraday high/low, and updates account balances.
 - `strategy.py` — the one implemented strategy: buy/sell based on whether the closing
   price is above/below the 20-day moving average of daily highs, with fixed 0.5%/1%
-  stop-loss/take-profit bands.
+  stop-loss/take-profit bands. It doesn't currently issue `CloseOrder`s itself.
 - `simulator.py` / `launcher.py` — drive the day-by-day simulation loop between a
   start and end date, then plot results with matplotlib (`plot.py`).
-- `order.py`, `orderreceipt.py`, `position.py`, `termnotice.py` — simple data/record
-  classes used to track orders, fills, open positions, and position termination.
+- `order.py` — an order to open a new position (buy/sell, quantity, stop-loss,
+  take-profit, optional expiry date).
+- `closeorder.py` — an order to close a specific already-open position by id,
+  independent of stop-loss/take-profit/expiry.
+- `orderreceipt.py`, `position.py`, `termnotice.py` — simple data/record classes
+  used to track fills, open positions, and position termination.
 - `account.py` — per-trader cash/margin bookkeeping and P&L on position close.
 - `msgq.py` — a minimal in-memory message queue used to pass orders/receipts between
   trader and broker.
@@ -47,11 +51,15 @@ Per `initial_spec.txt`, the design has 3 conceptual agents:
   once the model starts making money again.
 - `user_notes.txt` — currently empty.
 
-## Known issues / limitations
+## Position closing
 
-- **Unimplemented features.** `Broker.execute_orders_to_close` raises
-  `NotImplementedError`, and `Broker.position_expired` is stubbed to always return
-  `False` — positions can currently only close via stop-loss or take-profit.
+A position closes the same day one of the following happens, in this order:
+
+1. **Take-profit** — intraday high/low reaches the order's `take_profit` level.
+2. **Stop-loss** — intraday high/low reaches the order's `stop_loss` level.
+3. **Expiry** — `Order.expiry_date` is reached; settles at that day's closing price.
+4. **Explicit close** — a `CloseOrder` referencing the position's id is submitted;
+   settles at that day's midpoint execution price, same as opening a position.
 
 ## Data
 

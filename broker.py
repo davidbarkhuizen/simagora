@@ -2,6 +2,7 @@ import logging
 from decimal import Decimal
 
 from order import Order
+from closeorder import CloseOrder
 from orderreceipt import OrderReceipt
 from account import Account
 from position import Position
@@ -173,33 +174,66 @@ class Broker(object):
     
     return False
 
-  def position_expired(self, pos, pdata, date):    
+  def position_expired(self, pos, pdata, date):
     '''
-    not implemented
+    close a position whose order has reached its expiry_date
+    settles at the expiry day's closing price
     '''
-    # TODO - currently expired at close, should define price
+    order = pos.order_receipt.order
+
+    if (order.expiry_date is None):
+      return False
+
+    if (date >= order.expiry_date):
+      trader = self.traders[order.trader_id]
+      trader.ac.handle_expiry(date, pos, pdata, order.buysell)
+      return True
+
     return False
-    raise NotImplementedError
-    
+
   def execute_orders_to_close(self, date):
     '''
-    execute strategy originating orders to close open positions
-    not implemented
+    search the orderQ for CloseOrders targeting a specific open position
+    calc execution price, settle P&L on the trader's account, close position
+    generate OrderReceipt & place on receiptQ
     '''
-    raise NotImplementedError
+    match_fn = lambda x: (isinstance(x, CloseOrder) == True)
+    orders_to_close = self.orderQ.extract_matching(match_fn)
+
+    for close_order in orders_to_close:
+      pos = self.positions.get(close_order.position_id)
+
+      if (pos is None) or (pos not in self.open_positions):
+        receipt = OrderReceipt(close_order, 'position_not_open', 0, date, 0)
+      else:
+        order = pos.order_receipt.order
+        exec_price = self.calc_execution_price(order.ins, order.buysell, date)
+
+        trader = self.traders[order.trader_id]
+        trader.ac.close_at_price(date, pos, exec_price, order.buysell)
+
+        self.open_positions.remove(pos)
+        self.closed_positions.append(pos)
+        self.term_notice_Q.put(pos.term_notice)
+
+        receipt = OrderReceipt(close_order, 'closed', exec_price, date, 0)
+
+      self.receiptQ.put(receipt)
+
+    return len(orders_to_close)
 
   def open_manage_and_close(self, date):
     '''
     execute_orders_to_open
     manage_open_positions
-    TODO - execute_orders_to_close
-    '''    
+    execute_orders_to_close
+    '''
     # 1. execute orders to open positions
     self.execute_orders_to_open(date)
     # 2. close positions triggered by intra-day movements & stop-loss/take-profit
     self.manage_open_positions(date)
     # 3. close positions based on outstanding close orders
-    # self.execute_orders_to_close(date)
+    self.execute_orders_to_close(date)
 
   def calc_execution_price(self, ins, buysell, date):
     '''
