@@ -16,7 +16,7 @@ from simagora.engine.trader import Trader
 from testutil import (
   FakeDataFeed, FakeUniverse, DAY1, DAY2, DAY1_PRICES,
   make_broker, make_broker_and_trader, open_position, make_manual_position,
-  make_multi_instrument_trader, submitted_orders, submitted_close_orders,
+  make_multi_instrument_trader, make_trader_with_strategy, submitted_orders, submitted_close_orders,
 )
 
 
@@ -122,9 +122,7 @@ class TestDualMovingAverageCrossoverStrategy(unittest.TestCase):
 
   def make_trader(self, today_close):
     datafeed, today = self.make_datafeed_with_today(today_close)
-    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = make_broker_and_trader(
-      datafeed, Decimal('10000'), 's&p500', DAY1, today)
-    trader.strategy = _ShortLookbackDualMACrossover(trader, DAY1, today)
+    orderQ, broker, trader = make_trader_with_strategy(datafeed, _ShortLookbackDualMACrossover, DAY1, today)
     return orderQ, trader, today
 
   def test_buy_signal_when_fast_average_crosses_above_slow(self):
@@ -627,9 +625,7 @@ class TestATRTrendFollowingStrategy(unittest.TestCase):
     prices[breakout_date] = breakout_prices
 
     datafeed = FakeDataFeed(prices)
-    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = make_broker_and_trader(
-      datafeed, Decimal('10000'), 's&p500', DAY1, breakout_date)
-    trader.strategy = strategy_class(trader, DAY1, breakout_date)
+    orderQ, broker, trader = make_trader_with_strategy(datafeed, strategy_class, DAY1, breakout_date)
     return orderQ, trader, breakout_date
 
   def test_buy_breakout_places_stop_loss_atr_multiplier_atrs_below_entry(self):
@@ -747,9 +743,7 @@ class TestRSIMeanReversionStrategy(unittest.TestCase):
     today = d - timedelta(days=1)
 
     datafeed = FakeDataFeed(prices)
-    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = make_broker_and_trader(
-      datafeed, Decimal('10000'), 's&p500', DAY1, today)
-    trader.strategy = _ShortLookbackRSIMeanReversion(trader, DAY1, today)
+    orderQ, broker, trader = make_trader_with_strategy(datafeed, _ShortLookbackRSIMeanReversion, DAY1, today)
     return orderQ, trader, today
 
   def test_buy_signal_when_rsi_is_oversold(self):
@@ -811,9 +805,7 @@ class TestDollarCostAveragingStrategy(unittest.TestCase):
       d = d + timedelta(days=1)
 
     datafeed = FakeDataFeed(prices)
-    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = make_broker_and_trader(
-      datafeed, Decimal('10000'), 's&p500', DAY1, dates[-1])
-    trader.strategy = _ShortIntervalDCA(trader, DAY1, dates[-1])
+    orderQ, broker, trader = make_trader_with_strategy(datafeed, _ShortIntervalDCA, DAY1, dates[-1])
     return orderQ, dates, trader
 
   def test_buys_on_the_first_trading_day(self):
@@ -868,10 +860,7 @@ class TestValueAveragingStrategy(unittest.TestCase):
 
   def make_trader(self, close_price):
     datafeed = FakeDataFeed({DAY1: {'high': close_price + 5, 'low': close_price - 5, 'close': close_price}})
-    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = make_broker_and_trader(
-      datafeed, Decimal('100000'), 's&p500', DAY1, DAY1)
-    trader.strategy = _ShortIntervalVA(trader, DAY1, DAY1)
-    return orderQ, broker, trader
+    return make_trader_with_strategy(datafeed, _ShortIntervalVA, DAY1, DAY1, opening_bal=Decimal('100000'))
 
   def make_position(self, broker, trader, quantity, execution_price):
     '''like make_manual_position, but with a configurable quantity - VA's sizing is the whole point of the strategy'''
