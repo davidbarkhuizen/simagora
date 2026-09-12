@@ -3,7 +3,6 @@ from decimal import Decimal
 from datetime import timedelta
 
 from simagora.domain.order import Order
-from simagora.domain.closeorder import CloseOrder
 from simagora.domain.orderreceipt import OrderReceipt
 from simagora.domain.position import Position
 from simagora.engine.strategy import (
@@ -17,7 +16,7 @@ from simagora.engine.trader import Trader
 from testutil import (
   FakeDataFeed, FakeUniverse, DAY1, DAY2, DAY1_PRICES,
   make_broker, make_broker_and_trader, open_position, make_manual_position,
-  make_multi_instrument_trader,
+  make_multi_instrument_trader, submitted_orders, submitted_close_orders,
 )
 
 
@@ -47,7 +46,7 @@ class TestStrategyCloseInTheMoneyPositions(unittest.TestCase):
 
     self.strategy.close_in_the_money_positions(DAY2, 'buy')
 
-    closed_ids = [co.position_id for co in self.orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))]
+    closed_ids = [co.position_id for co in submitted_close_orders(self.orderQ)]
 
     self.assertEqual(closed_ids, [profitable_buy.id])
     self.assertNotIn(losing_buy.id, closed_ids)
@@ -63,8 +62,8 @@ class TestStrategyCloseInTheMoneyPositions(unittest.TestCase):
     # day2: mavg('high') = avg(105, 112) = 108.5, close = 110 -> buy signal
     self.trader.execute_strategy(DAY2)
 
-    new_orders = self.orderQ.extract_matching(lambda x: isinstance(x, Order))
-    close_orders = self.orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    new_orders = submitted_orders(self.orderQ)
+    close_orders = submitted_close_orders(self.orderQ)
 
     self.assertEqual(len(new_orders), 1)
     self.assertEqual(new_orders[0].buysell, 'buy')
@@ -179,7 +178,7 @@ class TestDualMomentumStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY1)  # must not raise
 
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
 
   def test_buys_the_leader_when_it_has_positive_momentum(self):
     orderQ, broker, trader = self.make_trader(
@@ -188,11 +187,11 @@ class TestDualMomentumStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY2)
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(len(orders), 1)
     self.assertEqual(orders[0].ins, 'AAA')
     self.assertEqual(orders[0].buysell, 'buy')
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))), 0)
+    self.assertEqual(len(submitted_close_orders(orderQ)), 0)
 
   def test_absolute_momentum_filter_blocks_a_negative_leader_and_closes_out_to_cash(self):
     # BBB is the relative leader (-5% beats -10%) but still negative
@@ -203,9 +202,9 @@ class TestDualMomentumStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY2)
 
-    close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    close_orders = submitted_close_orders(orderQ)
     self.assertEqual([co.position_id for co in close_orders], [pos.id])
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
 
   def test_holds_the_leader_without_churn_when_it_is_unchanged(self):
     orderQ, broker, trader = self.make_trader(
@@ -215,8 +214,8 @@ class TestDualMomentumStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY2)
 
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
+    self.assertEqual(len(submitted_close_orders(orderQ)), 0)
 
   def test_rotates_out_of_the_old_leader_into_the_new_one(self):
     orderQ, broker, trader = self.make_trader(
@@ -226,10 +225,10 @@ class TestDualMomentumStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY2)
 
-    close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    close_orders = submitted_close_orders(orderQ)
     self.assertEqual([co.position_id for co in close_orders], [pos.id])
 
-    new_orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    new_orders = submitted_orders(orderQ)
     self.assertEqual(len(new_orders), 1)
     self.assertEqual(new_orders[0].ins, 'AAA')
 
@@ -265,17 +264,17 @@ class TestCrossSectionalMomentumStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY1)  # must not raise
 
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
 
   def test_goes_long_the_top_performer_and_short_the_bottom(self):
     orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
 
     trader.execute_strategy(DAY2)
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     by_ins = {o.ins: o.buysell for o in orders}
     self.assertEqual(by_ins, {'AAA': 'buy', 'CCC': 'sell'})  # BBB (middle) untouched
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))), 0)
+    self.assertEqual(len(submitted_close_orders(orderQ)), 0)
 
   def test_holds_existing_long_and_short_without_churn_when_unchanged(self):
     orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
@@ -284,8 +283,8 @@ class TestCrossSectionalMomentumStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY2)
 
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
+    self.assertEqual(len(submitted_close_orders(orderQ)), 0)
 
   def test_rotates_out_of_stale_positions_into_the_new_ranking(self):
     orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
@@ -295,12 +294,12 @@ class TestCrossSectionalMomentumStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY2)
 
-    close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    close_orders = submitted_close_orders(orderQ)
     self.assertEqual(
       {co.position_id for co in close_orders},
       {stale_long.id, stale_short.id})
 
-    new_orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    new_orders = submitted_orders(orderQ)
     by_ins = {o.ins: o.buysell for o in new_orders}
     self.assertEqual(by_ins, {'AAA': 'buy', 'CCC': 'sell'})
 
@@ -321,7 +320,7 @@ class TestCrossSectionalMomentumStrategy(unittest.TestCase):
     # top 2 of 2 and bottom 2 of 2 are the same two instruments - the
     # short side must be dropped entirely rather than shorting and
     # going long the same instrument at once
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     by_ins = {o.ins: o.buysell for o in orders}
     self.assertEqual(by_ins, {'AAA': 'buy', 'BBB': 'buy'})
 
@@ -354,11 +353,11 @@ class TestLowVolatilityStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY2)
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(len(orders), 1)
     self.assertEqual(orders[0].ins, 'AAA')
     self.assertEqual(orders[0].buysell, 'buy')
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))), 0)
+    self.assertEqual(len(submitted_close_orders(orderQ)), 0)
 
   def test_holds_the_calmest_instrument_without_churn_when_unchanged(self):
     orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
@@ -366,8 +365,8 @@ class TestLowVolatilityStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY2)
 
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
+    self.assertEqual(len(submitted_close_orders(orderQ)), 0)
 
   def test_rotates_out_of_a_position_that_is_no_longer_the_calmest(self):
     orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
@@ -375,10 +374,10 @@ class TestLowVolatilityStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY2)
 
-    close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    close_orders = submitted_close_orders(orderQ)
     self.assertEqual([co.position_id for co in close_orders], [stale.id])
 
-    new_orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    new_orders = submitted_orders(orderQ)
     self.assertEqual(len(new_orders), 1)
     self.assertEqual(new_orders[0].ins, 'AAA')
 
@@ -394,7 +393,7 @@ class TestLowVolatilityStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY2)  # must not raise
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(len(orders), 1)
     self.assertEqual(orders[0].ins, 'AAA')
 
@@ -466,7 +465,7 @@ class TestTrendFollowingStrategy(unittest.TestCase):
 
     trader.execute_strategy(breakout_date)
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(len(orders), 1)
     self.assertEqual(orders[0].buysell, 'buy')
     # stop-loss = the exit-window low over the days preceding the breakout
@@ -481,7 +480,7 @@ class TestTrendFollowingStrategy(unittest.TestCase):
 
     trader.execute_strategy(breakout_date)
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(len(orders), 1)
     self.assertEqual(orders[0].buysell, 'sell')
     self.assertEqual(orders[0].stop_loss, self.RANGE_HIGH)
@@ -495,7 +494,7 @@ class TestTrendFollowingStrategy(unittest.TestCase):
 
     trader.execute_strategy(breakout_date)
 
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
 
   def test_no_signal_without_enough_preceding_history(self):
     # only 1 day of history exists - n_day_high/n_day_low (which
@@ -506,7 +505,7 @@ class TestTrendFollowingStrategy(unittest.TestCase):
 
     trader.execute_strategy(DAY1)  # must not raise
 
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
 
   def test_closes_opposite_direction_position_on_new_breakout(self):
     datafeed, breakout_date = self.make_datafeed_with_breakout(
@@ -524,7 +523,7 @@ class TestTrendFollowingStrategy(unittest.TestCase):
 
     trader.execute_strategy(breakout_date)
 
-    close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    close_orders = submitted_close_orders(orderQ)
     self.assertEqual(len(close_orders), 1)
     self.assertEqual(close_orders[0].position_id, pos.id)
 
@@ -556,7 +555,7 @@ class TestMeanReversionStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(len(orders), 1)
     self.assertEqual(orders[0].buysell, 'buy')
     self.assertLess(orders[0].stop_loss, Decimal('80'))
@@ -569,7 +568,7 @@ class TestMeanReversionStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(len(orders), 1)
     self.assertEqual(orders[0].buysell, 'sell')
     self.assertGreater(orders[0].stop_loss, Decimal('120'))
@@ -582,7 +581,7 @@ class TestMeanReversionStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
 
 
 class _ShortIntervalDCA(DollarCostAveragingStrategy):
@@ -613,7 +612,7 @@ class TestDollarCostAveragingStrategy(unittest.TestCase):
 
     trader.execute_strategy(dates[0])
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(len(orders), 1)
     self.assertEqual(orders[0].buysell, 'buy')
     self.assertEqual(orders[0].quantity, Decimal('1'))
@@ -626,7 +625,7 @@ class TestDollarCostAveragingStrategy(unittest.TestCase):
     for d in dates:
       trader.execute_strategy(d)
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(len(orders), 1)
 
   def test_buys_again_once_the_interval_elapses(self):
@@ -635,7 +634,7 @@ class TestDollarCostAveragingStrategy(unittest.TestCase):
     for d in dates:
       trader.execute_strategy(d)
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(len(orders), 2)
 
   def test_quantity_is_configurable(self):
@@ -647,7 +646,7 @@ class TestDollarCostAveragingStrategy(unittest.TestCase):
 
     trader.execute_strategy(dates[0])
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(orders[0].quantity, Decimal('5'))
 
 
@@ -700,14 +699,14 @@ class TestPairsTradingStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)  # must not raise
 
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
 
   def test_no_signal_when_spread_matches_its_own_flat_history(self):
     orderQ, broker, trader, today = self.make_trader(Decimal('100'), Decimal('100'))
 
     trader.execute_strategy(today)
 
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
 
   def test_shorts_the_rich_leg_and_longs_the_cheap_leg_on_entry(self):
     # AAA jumps far above BBB after 9 flat (spread=0) days
@@ -715,7 +714,7 @@ class TestPairsTradingStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(len(orders), 2)
     by_ins = {o.ins: o for o in orders}
     self.assertEqual(by_ins['AAA'].buysell, 'sell')  # AAA got relatively rich
@@ -727,7 +726,7 @@ class TestPairsTradingStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    orders = submitted_orders(orderQ)
     self.assertEqual(len(orders), 2)
     by_ins = {o.ins: o for o in orders}
     self.assertEqual(by_ins['AAA'].buysell, 'buy')   # AAA got relatively cheap
@@ -739,7 +738,7 @@ class TestPairsTradingStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
 
   def test_closes_both_legs_once_the_spread_reverts(self):
     orderQ, broker, trader, today = self.make_trader(Decimal('100'), Decimal('100'))
@@ -748,7 +747,7 @@ class TestPairsTradingStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    close_orders = submitted_close_orders(orderQ)
     self.assertEqual({co.position_id for co in close_orders}, {pos_a.id, pos_b.id})
 
   def test_closes_a_lone_surviving_leg_instead_of_treating_it_as_a_complete_pair(self):
@@ -765,10 +764,10 @@ class TestPairsTradingStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    close_orders = submitted_close_orders(orderQ)
     self.assertEqual([co.position_id for co in close_orders], [lone_leg.id])
 
-    new_orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    new_orders = submitted_orders(orderQ)
     self.assertEqual(len(new_orders), 0)
 
 

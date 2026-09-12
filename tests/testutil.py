@@ -7,6 +7,7 @@ from simagora.engine.broker import Broker
 from simagora.engine.msgq import MsgQ
 from simagora.engine.trader import Trader
 from simagora.domain.order import Order
+from simagora.domain.closeorder import CloseOrder
 from simagora.domain.orderreceipt import OrderReceipt
 from simagora.domain.position import Position
 from simagora.marketdata.universe import SpreadStatsMixin
@@ -211,3 +212,13 @@ def make_manual_position(broker, trader, ins, buysell='buy', execution_price=Dec
   broker.open_positions.append(pos)
   broker.positions[pos.id] = pos
   return pos
+
+
+def submitted_orders(orderQ):
+  '''every plain Order (not CloseOrder) currently queued on orderQ'''
+  return orderQ.extract_matching(lambda x: isinstance(x, Order))
+
+
+def submitted_close_orders(orderQ):
+  '''every CloseOrder currently queued on orderQ'''
+  return orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
