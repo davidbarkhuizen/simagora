@@ -2,14 +2,16 @@
 
 import unittest
 from decimal import Decimal
-from datetime import timedelta
 
 from simagora.domain.order import Order
 from simagora.domain.orderreceipt import OrderReceipt
 from simagora.domain.position import Position
 from simagora.engine.strategy import TrendFollowingStrategy
 
-from testutil import FakeDataFeed, DAY1, DAY1_PRICES, make_broker_and_trader, submitted_orders, submitted_close_orders
+from testutil import (
+  FakeDataFeed, DAY1, DAY1_PRICES,
+  make_broker_and_trader, make_flat_range_prices, submitted_orders, submitted_close_orders,
+)
 
 
 class TestTrendFollowingStrategy(unittest.TestCase):
@@ -24,12 +26,8 @@ class TestTrendFollowingStrategy(unittest.TestCase):
     ENTRY_WINDOW flat, range-bound days (fixed high/low/close), followed
     by one more day carrying breakout_prices; returns (datafeed, breakout_date)
     '''
-    prices = {}
-    d = DAY1
-    for i in range(self.ENTRY_WINDOW):
-      prices[d] = {'high': self.RANGE_HIGH, 'low': self.RANGE_LOW, 'close': self.RANGE_CLOSE}
-      d = d + timedelta(days=1)
-    breakout_date = d
+    prices, breakout_date = make_flat_range_prices(
+      self.ENTRY_WINDOW, self.RANGE_HIGH, self.RANGE_LOW, self.RANGE_CLOSE)
     prices[breakout_date] = breakout_prices
     return FakeDataFeed(prices), breakout_date
 

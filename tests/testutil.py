@@ -1,7 +1,7 @@
 '''shared test doubles, factories, and constants for the simagora test suite'''
 
 from decimal import Decimal
-from datetime import date
+from datetime import date, timedelta
 
 from simagora.engine.broker import Broker
 from simagora.engine.msgq import MsgQ
@@ -278,6 +278,23 @@ def make_manual_position(broker, trader, ins, buysell='buy', execution_price=Dec
   broker.open_positions.append(pos)
   broker.positions[pos.id] = pos
   return pos
+
+
+def make_flat_range_prices(num_days, high, low, close, start_date=DAY1):
+  '''
+  num_days flat, range-bound trading days (fixed high/low/close)
+  starting at start_date; returns (prices, next_date) where next_date
+  is the first date after the flat range - shared by
+  TestTrendFollowingStrategy/TestATRTrendFollowingStrategy, whose
+  Donchian-channel entry logic needs a flat range to break out of.
+  The caller adds its own breakout day at next_date.
+  '''
+  prices = {}
+  d = start_date
+  for i in range(num_days):
+    prices[d] = {'high': high, 'low': low, 'close': close}
+    d = d + timedelta(days=1)
+  return prices, d
 
 
 def submitted_orders(orderQ):
