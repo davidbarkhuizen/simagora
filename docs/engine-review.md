@@ -9,9 +9,13 @@ simplification.
 
 ## 1. Obvious logical gaps
 
-- **No transaction cost modeling.** No commissions, fees, bid/ask spread, or
-  slippage anywhere. `Broker.calc_execution_price` fills every order at the
-  day's `(high+low)/2` — a clean but cost-free execution assumption.
+- **Transaction cost only covers the open/close spread, not exits or fees.**
+  `Broker.calc_execution_price` now applies an optional flat per-unit
+  `transaction_cost` against every open and explicit-close fill (both
+  round-trip legs), but stop-loss/take-profit/expiry exits still fill at
+  their literal trigger level or the day's raw close, untouched by cost -
+  and there's still no separate commission/fee model distinct from this
+  spread-style cost.
 - **No slippage on stop-loss execution.** `Account.stop_loss` always books
   the loss as exactly the margin reserved at entry, regardless of how far
   the day's low actually gapped past the stop level. Real stop orders can
@@ -62,27 +66,17 @@ not re-litigated:
 Reasonable next capabilities that fit the existing architecture without a
 rewrite:
 
-- ~~**Analytics/reporting.**~~ Done: `Account.equity(date)`/`equity_curve()`
-  (cash + margin + unrealized open-position P&L, off the daily
-  `d_cash_bal`/`d_margin_bal`/`net_open_position` series already tracked)
-  and `Account.closed_trades`/`trade_pnls()` (now appended to by every
-  close path — `_close_position`, `stop_loss`, `handle_expiry`) feed
-  `engine/stats.py`'s `total_return`, `cagr`, `max_drawdown`,
-  `sharpe_ratio`, `win_rate`, `average_win`, `average_loss`.
-  `Simulator.plot()` remains the only *chart* surface — nothing renders
-  these numbers yet, they're library functions a caller invokes directly.
-- **Transaction cost modeling** could slot into
-  `Broker.calc_execution_price`/`_calc_execution_price_or_reject` as an
-  optional cost parameter without touching call sites.
+- **Nothing surfaces `engine/stats.py`'s metrics in a real run.**
+  `Account.equity(date)`/`equity_curve()`/`trade_pnls()` and `stats.py`'s
+  `total_return`/`cagr`/`max_drawdown`/`sharpe_ratio`/`win_rate`/
+  `average_win`/`average_loss` are all pure library calls - nothing in
+  `Simulator`/`Launcher` invokes them. `Simulator.plot()` remains the only
+  actual reporting surface, and it's still just a matplotlib PNG plus a
+  couple of `logging.info` lines.
 - **Portfolio-level risk controls** (max concurrent positions, max
   gross/net exposure, per-instrument or per-trader position limits) —
   `Broker`/`Account` already have all the bookkeeping these would read
   from; there's just no gate that consults it before opening.
-- ~~**Wiring up `Order.leverage`**~~ Done: `Order.__init__` now accepts an
-  optional `leverage` parameter (defaults to `1`, coerced to `Decimal` like
-  `quantity`), activating the already-generic P&L/margin math in
-  `Account`/`Broker`. No strategy passes a non-default value yet - this
-  only makes leverage reachable, not used.
 
 ## 4. Genuine engine-level edge cases worth flagging
 
@@ -107,14 +101,10 @@ rewrite:
 
 ## Biggest bang-for-buck
 
-~~An `Account.equity()` accessor plus a small stats module (Sharpe/drawdown/
-CAGR off the data already being tracked)~~ — done, see §3. ~~Wire up
-`Account.closed_trades` so win rate and average win/loss can be added to
-`stats.py`~~ — also done, see §3. ~~Wiring up `Order.leverage`~~ — also
-done, see §3. All five were additive and touched no existing bookkeeping
-logic.
-
-Next candidate: transaction cost modeling (§3) — an optional cost
-parameter on `Broker.calc_execution_price`/`_calc_execution_price_or_reject`
-would make every backtest's P&L (and the `stats.py` metrics computed from
-it) reflect the cost of trading, not just its cost-free upside.
+Portfolio-level risk controls (§3) — a gate `Broker.execute_orders_to_open`
+consults before committing an order (max concurrent positions, max
+gross/net exposure, per-instrument or per-trader position limits).
+`Broker`/`Account` already track everything such a gate would need to read
+(`open_positions`, `get_open_positions_for_trader`, `cash_bal`/`margin_bal`);
+it's additive, and touches only the one method that currently commits every
+order unconditionally once margin is available.

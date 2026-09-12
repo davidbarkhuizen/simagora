@@ -1,4 +1,5 @@
 from datetime import *
+from decimal import Decimal
 from ..marketdata.datafeed import DataFeed
 from ..marketdata.universe import Universe
 from .broker import Broker
@@ -24,7 +25,8 @@ class Simulator(object):
   '''
   simulation manager
   '''  
-  def __init__(self, instrument, strategies, start_date, end_date, opening_bal, time_stamp=None, universe=None):
+  def __init__(self, instrument, strategies, start_date, end_date, opening_bal, time_stamp=None,
+               universe=None, transaction_cost=Decimal(0)):
     '''
     constructs message queues
     initialises brokers and traders
@@ -39,6 +41,10 @@ class Simulator(object):
     same universe for a multi-instrument strategy to trade across.
     `instrument` remains the "primary" instrument used for plot()'s
     single-instrument-shaped charting either way.
+
+    transaction_cost is forwarded to the Broker - see
+    Broker.calc_execution_price. Defaults to 0, the original cost-free
+    execution assumption.
     '''
     self.instrument = instrument
     self.universe = universe
@@ -59,7 +65,8 @@ class Simulator(object):
     self.term_req_Q = MsgQ()
     self.term_notice_Q = MsgQ()
 
-    self.broker = Broker(self.datafeed, self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q)
+    self.broker = Broker(self.datafeed, self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q,
+                         transaction_cost=transaction_cost)
 
     self.traders = []
     for strategy in strategies:

@@ -57,8 +57,13 @@ to be run from the repo root.
   elsewhere in the codebase) or an `Account.trade_pnls()` list
   (`win_rate`, `average_win`, `average_loss`).
 - `broker.py` — receives orders via `msgq.py` message queues, computes a fill price
-  (midpoint of the day's high/low), opens/closes `Position`s, checks stop-loss/
-  take-profit levels against intraday high/low, and updates account balances.
+  (midpoint of the day's high/low, adjusted by an optional flat per-unit
+  `transaction_cost` - added against a buy, subtracted against a sell,
+  defaulting to `0`; `execute_orders_to_close` passes the *closing* fill's
+  own direction, the opposite of the position's own buysell, so cost is
+  charged on both legs of a round trip, not just the entry), opens/closes
+  `Position`s, checks stop-loss/take-profit levels against intraday
+  high/low, and updates account balances.
 - `trader.py` — holds a strategy and an `Account`, submits orders, and drains its
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
@@ -92,7 +97,9 @@ to be run from the repo root.
   name (base classes, concrete strategies, the registry) so
   `from simagora.engine.strategy import ...` still works unchanged wherever it
   was already used.
-- `simulator.py` — drives the day-by-day simulation loop between a start and end date.
+- `simulator.py` — drives the day-by-day simulation loop between a start and end
+  date. Takes an optional `transaction_cost` (default `0`), forwarded straight to
+  `Broker`.
 
 ## `marketdata/`
 

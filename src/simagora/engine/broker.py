@@ -9,16 +9,21 @@ from ..domain.position import Position
 
 class Broker(object):  
   
-  def __init__(self, datafeed, orderQ, receiptQ, term_req_Q, term_notice_Q):
+  def __init__(self, datafeed, orderQ, receiptQ, term_req_Q, term_notice_Q, transaction_cost=Decimal(0)):
     '''
+    transaction_cost: a flat per-unit cost (in price terms) charged
+    against every fill's execution price - see calc_execution_price.
+    Defaults to 0, the original cost-free execution assumption.
     '''
     self.datafeed = datafeed
-    
+
     self.orderQ = orderQ
     self.receiptQ = receiptQ
     self.term_req_Q = term_req_Q
     self.term_notice_Q = term_notice_Q
-    
+
+    self.transaction_cost = transaction_cost
+
     self.traders = {}
     
     self.open_positions = []    
@@ -254,7 +259,15 @@ class Broker(object):
         receipt = OrderReceipt(close_order, 'not_authorized', 0, date, 0)
       else:
         order = pos.order_receipt.order
-        exec_price = self._calc_execution_price_or_reject(close_order, order.ins, order.buysell, date)
+        # the closing fill is the opposite action of the position's own
+        # buysell (exiting a buy is a sell, and vice versa) - matters
+        # once transaction_cost is nonzero, since calc_execution_price
+        # now charges cost against whichever direction it's given;
+        # passing the position's own buysell here (as if re-entering,
+        # not exiting) would flip transaction_cost into a benefit on
+        # every close instead of a cost
+        close_buysell = 'sell' if (order.buysell == 'buy') else 'buy'
+        exec_price = self._calc_execution_price_or_reject(close_order, order.ins, close_buysell, date)
 
         if (exec_price is None):
           continue
@@ -287,15 +300,19 @@ class Broker(object):
 
   def calc_execution_price(self, ins, buysell, date):
     '''
-    price = (pdata['high'] + pdata['low']) / Decimal(2)
-    None if ins has no data for date
+    price = (pdata['high'] + pdata['low']) / Decimal(2), then adjusted
+    unfavorably by self.transaction_cost - added for a buy (paying
+    more), subtracted for a sell (receiving less) - modeling a flat
+    per-unit bid/ask spread or slippage cost against the trade
+    direction. transaction_cost defaults to 0, the original cost-free
+    execution assumption. None if ins has no data for date.
     '''
     pdata = self.datafeed.get_price_info(ins, date)
     if (pdata is None):
       return None
     # average of day high and low
     price = (pdata['high'] + pdata['low']) / Decimal(2)
-    return price
+    return (price + self.transaction_cost) if (buysell == 'buy') else (price - self.transaction_cost)
 
   def log_all_positions(self, d):
     '''
