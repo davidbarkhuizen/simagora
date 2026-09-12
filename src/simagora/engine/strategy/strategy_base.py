@@ -1,6 +1,7 @@
 import inspect
 import logging
 
+from ...domain.order import Order
 from ...domain.closeorder import CloseOrder
 
 class BaseStrategy(object):
@@ -32,6 +33,18 @@ class BaseStrategy(object):
   def take_profit_level(self, price, buysell, margin):
     '''price adjusted margin in favor of a buysell position - above price for a buy, below for a sell'''
     return price * (1 + margin) if (buysell == 'buy') else price * (1 - margin)
+
+  def submit_banded_order(self, ins, buysell, quantity, cur_price, stop_loss_margin, take_profit_margin, date):
+    '''
+    build and submit an Order in the given direction, with stop-loss/
+    take-profit levels computed via stop_loss_level/take_profit_level
+    around cur_price - the "submit a margin-banded order" shape shared
+    by MovingAverageCrossoverBase and MeanReversionBase
+    '''
+    order = Order(ins, buysell, quantity,
+      self.stop_loss_level(cur_price, buysell, stop_loss_margin),
+      self.take_profit_level(cur_price, buysell, take_profit_margin), date)
+    self.submit_order(order)
 
   def log_self(self):
     '''log this strategy's own source file, line by line, for the run's audit trail'''
