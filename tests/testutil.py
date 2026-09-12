@@ -209,6 +209,22 @@ def make_broker_and_trader(datafeed, opening_bal, instrument, start_date, end_da
   return orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader
 
 
+def make_trader_with_strategy(datafeed, strategy_class, start_date, end_date,
+                               opening_bal=Decimal('10000'), instrument='s&p500'):
+  '''
+  (orderQ, broker, trader) wired up with a single-instrument datafeed,
+  and trader.strategy swapped for strategy_class(trader, start_date,
+  end_date) - shared by every single-instrument strategy test class in
+  test_strategy.py, whose own make_trader() typically wraps this for
+  its own fixture-shape convenience (building the datafeed, choosing
+  what to return)
+  '''
+  orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader = make_broker_and_trader(
+    datafeed, opening_bal, instrument, start_date, end_date)
+  trader.strategy = strategy_class(trader, start_date, end_date)
+  return orderQ, broker, trader
+
+
 def make_multi_instrument_trader(prices_by_ins, strategy_class, instrument=None, universe=None,
                                   start_date=DAY1, end_date=DAY2, opening_bal=Decimal('10000')):
   '''
