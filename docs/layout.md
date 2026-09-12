@@ -49,7 +49,7 @@ to be run from the repo root.
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
   being silently discarded.
-- `strategy.py` — six strategies, all sharing `BaseStrategy` for trader/datafeed
+- `strategy.py` — seven strategies, all sharing `BaseStrategy` for trader/datafeed
   wiring, order submission, and `log_self()`; split into `SingleInstrumentStrategy`/
   `MultiInstrumentStrategy` for what instrument(s) they trade (see
   [Multi-instrument support](multi-instrument.md)). Selected by name (see

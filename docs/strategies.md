@@ -55,13 +55,25 @@ Selected by the `strat` list passed to `Launcher()`/`Simulator()` (see
   above. Long-only, with no cash filter: it's always fully invested in whichever
   instruments are currently calmest. A currently-held instrument still among the
   calmest is left alone rather than churned.
+- **`'dollarcostaveraging'`** — `DollarCostAveragingStrategy`. Buys a fixed
+  quantity of `trader.instrument` every `interval_days` trading days (default 21,
+  ~1 trading month), starting on the very first one, and does nothing else — no
+  signal, no timing, no exit. The passive control-group baseline every other
+  strategy above should be measured against. Each purchase has
+  `stop_loss=take_profit=None`, opening as a fully-collateralized position (see
+  [Position closing](position-closing.md)) that never auto-closes; positions
+  simply accumulate and are marked to market for the rest of the run. Sized by a
+  fixed share quantity rather than a fixed dollar amount, like every strategy
+  above — an order submitted today executes at tomorrow's price (see
+  [Overview](overview.md)), which isn't known yet at submission time.
 
 An unrecognized name raises `ValueError` rather than silently falling back to a
 default, so a typo doesn't quietly run the wrong strategy; `None` (what every
 `Trader`-constructing test in this repo passes, since they don't care which
 strategy loads) resolves to `'movavg'`.
 
-The first three strategies above are single-instrument (`SingleInstrumentStrategy`
-reads `trader.instrument`); `DualMomentumStrategy`, `CrossSectionalMomentumStrategy`,
-and `LowVolatilityStrategy` are multi-instrument — see
+The first three strategies above and `DollarCostAveragingStrategy` are
+single-instrument (`SingleInstrumentStrategy` reads `trader.instrument`);
+`DualMomentumStrategy`, `CrossSectionalMomentumStrategy`, and
+`LowVolatilityStrategy` are multi-instrument — see
 [Multi-instrument support](multi-instrument.md) for the plumbing they're built on.
