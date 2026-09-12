@@ -52,9 +52,6 @@ rewrite - none outstanding right now; `Simulator.report_performance()`
 
 ## 4. Genuine engine-level edge cases worth flagging
 
-- **`MsgQ.extract_matching`** does an O(n) linear scan with `list.pop(i)`
-  inside a `while` loop — fine at backtest scale, no correctness issue,
-  just worth knowing if instrument/trader counts ever grow large.
 - **Multi-trader interactions are fully independent.** Traders share one
   `Broker`/`orderQ` but have separate `Account`s and no shared-liquidity or
   market-impact modeling — reasonable for independent-strategy backtests,
