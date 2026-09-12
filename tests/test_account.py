@@ -338,6 +338,48 @@ class TestQuantityForEquityFraction(unittest.TestCase):
     self.assertEqual(qty, Decimal('0'))
 
 
+class TestNetQuantityByInstrument(unittest.TestCase):
+
+  def setUp(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, self.broker, self.trader) = \
+      make_broker_and_trader(datafeed, Decimal('100000'), 's&p500', DAY1, DAY1)
+
+  def test_empty_with_no_open_positions(self):
+    self.assertEqual(self.trader.ac.net_quantity_by_instrument(), {})
+
+  def test_sums_same_direction_lots_on_the_same_instrument(self):
+    open_position(self.trader, self.broker, DAY1, buysell='buy', quantity=2)
+    open_position(self.trader, self.broker, DAY1, buysell='buy', quantity=3)
+
+    self.assertEqual(
+      self.trader.ac.net_quantity_by_instrument(), {'s&p500': Decimal('5')})
+
+  def test_nets_long_and_short_lots_on_the_same_instrument(self):
+    open_position(self.trader, self.broker, DAY1, buysell='buy', quantity=5)
+    open_position(self.trader, self.broker, DAY1, buysell='sell', quantity=3,
+                   stop_loss=Decimal('110'), take_profit=Decimal('90'))
+
+    self.assertEqual(
+      self.trader.ac.net_quantity_by_instrument(), {'s&p500': Decimal('2')})
+
+  def test_omits_an_instrument_whose_lots_net_to_exactly_zero(self):
+    open_position(self.trader, self.broker, DAY1, buysell='buy', quantity=3)
+    open_position(self.trader, self.broker, DAY1, buysell='sell', quantity=3,
+                   stop_loss=Decimal('110'), take_profit=Decimal('90'))
+
+    self.assertEqual(self.trader.ac.net_quantity_by_instrument(), {})
+
+  def test_tracks_multiple_instruments_independently(self):
+    open_position(self.trader, self.broker, DAY1, buysell='buy', quantity=4, ins='AAA')
+    open_position(self.trader, self.broker, DAY1, buysell='sell', quantity=6, ins='BBB',
+                   stop_loss=Decimal('110'), take_profit=Decimal('90'))
+
+    self.assertEqual(
+      self.trader.ac.net_quantity_by_instrument(),
+      {'AAA': Decimal('4'), 'BBB': Decimal('-6')})
+
+
 class TestHandleExpirySign(unittest.TestCase):
   '''
   handle_expiry's "expired out of the money" branch previously

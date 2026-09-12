@@ -138,6 +138,27 @@ class Account(HasAutoId):
       pdelta = _signed_pdelta(order.buysell, receipt.execution_price, pdata['close'])
       pos.history[date] = pdelta * order.quantity * order.leverage
 
+  def net_quantity_by_instrument(self):
+    '''
+    {instrument: net signed quantity} across this trader's own open
+    positions - positive for net long, negative for net short. Each
+    `Order` always opens its own independent `Position`, even for the
+    same instrument+direction already held (a deliberate lot-based
+    model, not an oversight - see docs/engine-review.md), so there's
+    normally no single place that already shows "how much am I net
+    long/short in X" without walking every open position and grouping
+    by instrument yourself; this does that once. An instrument whose
+    lots fully offset (net exactly zero) is omitted rather than
+    included with a zero value.
+    '''
+    by_instrument = {}
+    for pos in self.broker.get_open_positions_for_trader(self.trader_id):
+      order = pos.order_receipt.order
+      signed_quantity = order.quantity if (order.buysell == 'buy') else -order.quantity
+      by_instrument[order.ins] = by_instrument.get(order.ins, Decimal(0)) + signed_quantity
+
+    return {ins: qty for ins, qty in by_instrument.items() if (qty != 0)}
+
   def record_net_end_of_day_pos(self, date):
     total = Decimal(0)
     open_positions = self.broker.get_open_positions_for_trader(self.trader_id)
