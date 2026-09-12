@@ -192,19 +192,20 @@ class FakeUniverse(SpreadStatsMixin):
     return any(feed.get_price_info(None, d) is not None for feed in self.feeds.values())
 
 
-def make_broker(datafeed=None):
+def make_broker(datafeed=None, transaction_cost=Decimal(0)):
   '''construct a Broker with fresh MsgQs; returns (orderQ, receiptQ, term_req_Q, term_notice_Q, broker)'''
   orderQ = MsgQ()
   receiptQ = MsgQ()
   term_req_Q = MsgQ()
   term_notice_Q = MsgQ()
-  broker = Broker(datafeed, orderQ, receiptQ, term_req_Q, term_notice_Q)
+  broker = Broker(datafeed, orderQ, receiptQ, term_req_Q, term_notice_Q, transaction_cost=transaction_cost)
   return orderQ, receiptQ, term_req_Q, term_notice_Q, broker
 
 
-def make_broker_and_trader(datafeed, opening_bal, instrument, start_date, end_date, strategy_name=None):
+def make_broker_and_trader(datafeed, opening_bal, instrument, start_date, end_date, strategy_name=None,
+                            transaction_cost=Decimal(0)):
   '''as make_broker(), plus a Trader registered with the broker; returns (..., broker, trader)'''
-  orderQ, receiptQ, term_req_Q, term_notice_Q, broker = make_broker(datafeed)
+  orderQ, receiptQ, term_req_Q, term_notice_Q, broker = make_broker(datafeed, transaction_cost=transaction_cost)
   trader = Trader(datafeed, broker, opening_bal, instrument, strategy_name, start_date, end_date)
   return orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader
 

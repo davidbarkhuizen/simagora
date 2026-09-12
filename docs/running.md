@@ -18,6 +18,9 @@ Launcher().go({
   'strat':      ['movavg'],  # a list - one Trader per element; each name is looked
                               # up in strategy.STRATEGY_REGISTRY (see Strategies below)
   'open_bal':   Decimal('10000.00'),
+  # 'transaction_cost': Decimal('0'),  # optional flat per-unit cost, charged
+                                        # against both legs of a round trip -
+                                        # see Layout's broker.py; defaults to 0
 })
 ```
 

@@ -151,6 +151,70 @@ class TestExecuteOrdersToClose(unittest.TestCase):
     self.assertEqual(self.trader.ac.margin_bal, Decimal('10'))
 
 
+class TestTransactionCost(unittest.TestCase):
+
+  def test_calc_execution_price_adds_cost_for_a_buy_and_subtracts_it_for_a_sell(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1, transaction_cost=Decimal('1'))
+
+    # midpoint = (105+95)/2 = 100
+    self.assertEqual(broker.calc_execution_price('s&p500', 'buy', DAY1), Decimal('101'))
+    self.assertEqual(broker.calc_execution_price('s&p500', 'sell', DAY1), Decimal('99'))
+
+  def test_defaults_to_zero_cost_matching_the_original_execution_price(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+
+    self.assertEqual(broker.calc_execution_price('s&p500', 'buy', DAY1), Decimal('100'))
+    self.assertEqual(broker.calc_execution_price('s&p500', 'sell', DAY1), Decimal('100'))
+
+  def test_round_trip_charges_cost_on_both_the_open_and_the_close_of_a_buy(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('115'), 'low': Decimal('105'), 'close': Decimal('110')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2, transaction_cost=Decimal('1'))
+    pos = open_position(trader, broker, DAY1)
+    # exec price = 100+1 = 101, margin = 101-90 = 11
+    self.assertEqual(trader.ac.margin_bal, Decimal('11'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9989'))
+
+    close_order = CloseOrder(pos.id, DAY2)
+    trader.submit_order(close_order)
+    broker.execute_orders_to_close(DAY2)
+
+    # closing a buy is a sell fill: exec price = 110-1 = 109
+    # pdelta = 109-101 = 8 (vs. 10 with no cost) - cost(1) charged on both legs
+    self.assertEqual(trader.ac.margin_bal, Decimal('0'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('10008'))
+    self.assertEqual(trader.ac.net_booked_position, Decimal('8'))
+
+  def test_round_trip_charges_cost_on_both_the_open_and_the_close_of_a_sell(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('95'), 'low': Decimal('85'), 'close': Decimal('90')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2, transaction_cost=Decimal('1'))
+    pos = open_position(trader, broker, DAY1, buysell='sell', stop_loss=Decimal('110'), take_profit=Decimal('90'))
+    # exec price = 100-1 = 99, margin = 110-99 = 11
+    self.assertEqual(trader.ac.margin_bal, Decimal('11'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9989'))
+
+    close_order = CloseOrder(pos.id, DAY2)
+    trader.submit_order(close_order)
+    broker.execute_orders_to_close(DAY2)
+
+    # closing a sell is a buy fill: exec price = 90+1 = 91
+    # pdelta = 99-91 = 8 (vs. 10 with no cost) - cost(1) charged on both legs
+    self.assertEqual(trader.ac.margin_bal, Decimal('0'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('10008'))
+    self.assertEqual(trader.ac.net_booked_position, Decimal('8'))
+
+
 class TestPositionExpired(unittest.TestCase):
 
   def setUp(self):

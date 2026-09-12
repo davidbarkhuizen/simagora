@@ -84,5 +84,32 @@ class TestPlotFindsTheRightTrader(unittest.TestCase):
     sim.plot()  # must not raise
 
 
+class TestSimulatorThreadsTransactionCostToBroker(unittest.TestCase):
+
+  def setUp(self):
+    self.data_root = tempfile.mkdtemp()
+    with open(os.path.join(self.data_root, 'testins.csv'), 'w', newline='') as f:
+      f.write('date,open,high,low,close,volume,adj_close\n')
+      f.write('2010-01-01,100,101,99,100,1000,100\n')
+    self.original_default_data_root = datafeed_module.DEFAULT_DATA_ROOT
+    datafeed_module.DEFAULT_DATA_ROOT = self.data_root
+
+  def tearDown(self):
+    datafeed_module.DEFAULT_DATA_ROOT = self.original_default_data_root
+    shutil.rmtree(self.data_root)
+
+  def test_explicit_transaction_cost_reaches_the_broker(self):
+    sim = Simulator(
+      'testins', ['movavg'], date(2010, 1, 1), date(2010, 1, 1), Decimal('10000'),
+      transaction_cost=Decimal('0.05'))
+
+    self.assertEqual(sim.broker.transaction_cost, Decimal('0.05'))
+
+  def test_defaults_to_zero(self):
+    sim = Simulator('testins', ['movavg'], date(2010, 1, 1), date(2010, 1, 1), Decimal('10000'))
+
+    self.assertEqual(sim.broker.transaction_cost, Decimal('0'))
+
+
 if __name__ == '__main__':
   unittest.main()
