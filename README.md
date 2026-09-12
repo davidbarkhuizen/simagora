@@ -25,7 +25,7 @@ src/simagora/
   domain/       order data model - independent of simulation mechanics
   engine/       simulation mechanics - orchestration and execution
   marketdata/   CSV-backed historical price data access
-  reporting/    plotting helpers
+  reporting/    empty (formerly plotting helpers, removed as dead code)
   launcher.py   entry point (Launcher, main())
   timer.py      small perf-timing helper (mostly unused, see below)
 tests/
@@ -98,11 +98,14 @@ to be run from the repo root.
 
 ### `reporting/`
 
-- `plot.py` — matplotlib plotting helpers. Currently unused/orphaned: nothing in
-  `engine/` or `launcher.py` calls into it - `Simulator.plot()` does its own inline
-  matplotlib plotting instead. It also has a function (`gen_plot_png_for_symbol_period`)
-  that references Django ORM models (`Symbol`, `DailyCandleSticks`) that don't exist
-  anywhere in this repo, evidently a leftover from a different, related project.
+Formerly held `plot.py`, a set of matplotlib plotting helpers - removed as dead
+code (nothing in `engine/`/`launcher.py` ever called into it, `Simulator.plot()`
+does its own inline matplotlib plotting instead; about half of `plot.py` also
+referenced names that don't exist anywhere in this repo - a `Histogram` class, and
+Django ORM models `Symbol`/`DailyCandleSticks` evidently left over from a
+different, related project - so those functions would have raised `NameError` if
+anything had ever called them). The package itself (`__init__.py`) is still here
+in case reporting helpers return.
 
 ### Top level
 
