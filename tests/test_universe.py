@@ -73,9 +73,21 @@ class TestUniverse(unittest.TestCase):
     atr = self.universe.n_day_atr('AAA', date(2010, 1, 2), 1)
     self.assertEqual(atr, Decimal('8'))
 
+  def test_trailing_dates_routes_to_the_right_instrument(self):
+    dates = self.universe.trailing_dates('AAA', date(2010, 1, 2), 2, include_current=True)
+    self.assertEqual(dates, [date(2010, 1, 2), date(2010, 1, 1)])
+
   def test_unknown_instrument_raises_a_clear_error(self):
     with self.assertRaises(ValueError):
       self.universe.get_price('CCC', date(2010, 1, 1), 'close')
+
+  def test_unknown_method_raises_an_attribute_error_not_a_silent_wrong_result(self):
+    # FeedDispatchMixin's __getattr__ forwards any unrecognized method
+    # name to the per-instrument feed - a genuine typo should still
+    # surface as an AttributeError (on DataFeed, once routed there),
+    # not be swallowed or misrouted
+    with self.assertRaises(AttributeError):
+      self.universe.not_a_real_method('AAA', date(2010, 1, 1))
 
   def test_date_is_trading_day_is_a_union_across_the_universe(self):
     # 2010-01-01: only AAA trades

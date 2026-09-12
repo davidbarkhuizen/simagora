@@ -10,7 +10,7 @@ from simagora.domain.order import Order
 from simagora.domain.closeorder import CloseOrder
 from simagora.domain.orderreceipt import OrderReceipt
 from simagora.domain.position import Position
-from simagora.marketdata.universe import SpreadStatsMixin
+from simagora.marketdata.universe import SpreadStatsMixin, FeedDispatchMixin
 from simagora.marketdata.statistics import mean, population_std_dev
 
 
@@ -131,7 +131,7 @@ class FakeDataFeed(object):
       return None
     return self.price_info_by_date[dates[idx]][field]
 
-  def trailing_dates(self, d, n, include_current):
+  def trailing_dates(self, instrument, d, n, include_current):
     '''dates for the same trailing window _trailing_values uses, most-recent-first - matches DataFeed.trailing_dates'''
     dates = sorted(self.price_info_by_date.keys())
     if (d not in dates):
@@ -142,14 +142,15 @@ class FakeDataFeed(object):
     return list(reversed(window))
 
 
-class FakeUniverse(SpreadStatsMixin):
+class FakeUniverse(FeedDispatchMixin, SpreadStatsMixin):
   '''
   minimal multi-instrument stand-in for Universe: one FakeDataFeed per
   instrument, dispatched by the `instrument` argument every method
-  already takes - mirrors Universe's own real DataFeed dispatch.
-  Inherits SpreadStatsMixin's spread/n_day_spread_moving_avg/
-  n_day_spread_std_dev unchanged from Universe, since that math only
-  depends on get_price/trailing_dates, already identical on both.
+  already takes - mirrors Universe's own real DataFeed dispatch via the
+  same FeedDispatchMixin. Inherits SpreadStatsMixin's spread/
+  n_day_spread_moving_avg/n_day_spread_std_dev unchanged from Universe,
+  since that math only depends on get_price/trailing_dates, already
+  identical on both.
   '''
 
   def __init__(self, feeds_by_instrument):
@@ -157,36 +158,6 @@ class FakeUniverse(SpreadStatsMixin):
 
   def _feed_for(self, instrument):
     return self.feeds[instrument]
-
-  def get_price_info(self, instrument, d):
-    return self._feed_for(instrument).get_price_info(instrument, d)
-
-  def get_price(self, instrument, d, field):
-    return self._feed_for(instrument).get_price(instrument, d, field)
-
-  def n_day_moving_avg(self, instrument, d, field, n):
-    return self._feed_for(instrument).n_day_moving_avg(instrument, d, field, n)
-
-  def n_day_high(self, instrument, d, field, n):
-    return self._feed_for(instrument).n_day_high(instrument, d, field, n)
-
-  def n_day_low(self, instrument, d, field, n):
-    return self._feed_for(instrument).n_day_low(instrument, d, field, n)
-
-  def n_day_std_dev(self, instrument, d, field, n):
-    return self._feed_for(instrument).n_day_std_dev(instrument, d, field, n)
-
-  def n_day_return(self, instrument, d, field, n):
-    return self._feed_for(instrument).n_day_return(instrument, d, field, n)
-
-  def n_day_rsi(self, instrument, d, field, n):
-    return self._feed_for(instrument).n_day_rsi(instrument, d, field, n)
-
-  def n_day_atr(self, instrument, d, n):
-    return self._feed_for(instrument).n_day_atr(instrument, d, n)
-
-  def trailing_dates(self, instrument, d, n, include_current):
-    return self._feed_for(instrument).trailing_dates(d, n, include_current)
 
   def date_is_trading_day(self, d):
     return any(feed.get_price_info(None, d) is not None for feed in self.feeds.values())
