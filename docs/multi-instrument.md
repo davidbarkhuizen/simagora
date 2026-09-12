@@ -70,7 +70,17 @@ counterpart used when a strategy trades across more than one.
   filter_fn=None)` (groups `BaseStrategy.open_positions()` by instrument, by
   `(instrument, buysell)`, or otherwise, optionally filtered - every concrete
   multi-instrument strategy uses this one), and `close_positions(positions,
-  date)` (ditto).
+  date)` (ditto). `rebalance_to(desired, key_fn, open_fn, date,
+  filter_fn=None)` goes a level further, bundling the whole reconcile-what's-
+  held-against-what's-wanted shape: close every open position whose key
+  (whatever `key_fn(order)` produces) fell out of `desired`, then call
+  `open_fn(key, date)` for every desired key not already held, leaving an
+  already-held desired key alone rather than churning it. `DualMomentumStrategy`
+  and `LowVolatilityStrategy` both key by bare instrument (via the shared
+  `_open_long(ins, date)` opener); `CrossSectionalMomentumStrategy` keys by
+  `(instrument, buysell)` so a long and a short on the same instrument are
+  tracked as independent slots. `PairsTradingStrategy` doesn't use it - its
+  z-score entry/exit state machine isn't a desired-set rebalance.
 - **`Universe.spread`/`n_day_spread_moving_avg`/`n_day_spread_std_dev`** give a
   strategy the rolling mean/std-dev of the price *difference* between two
   instruments - the same moving-average/std-dev shape `MeanReversionStrategy`

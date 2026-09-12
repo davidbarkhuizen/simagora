@@ -39,17 +39,35 @@ to be run from the repo root.
 - `msgq.py` — a minimal in-memory message queue used to pass orders/receipts between
   trader and broker.
 - `account.py` — per-trader cash/margin bookkeeping and P&L on position close.
-  `take_profit()` and `close_at_price()` are both just closing a position at some
-  price and banking the resulting pnl - the only difference is which price and
-  what `TermNotice` reason - so both delegate to a shared private
-  `_close_position(date, pos, price, buysell, reason)`, which (along with
-  `stop_loss`/`handle_expiry`) also appends the closed `Position` onto
-  `closed_trades`. `equity(date)`/`equity_curve()` read back the daily
-  `d_cash_bal`/`d_margin_bal`/`net_open_position` series `Simulator.run()`
-  already records each trading day, giving cash + margin held + unrealized
-  P&L as a single mark-to-market net worth figure; `trade_pnls()` reads
-  `closed_trades`' `term_notice.profitloss` values back as a plain list -
-  both are the inputs `stats.py` (below) computes performance metrics from.
+  `take_profit()`, `stop_loss()`, `handle_expiry()`, and `close_at_price()` are
+  all just closing a position at some price and banking the resulting pnl -
+  the only difference is which price and what `TermNotice` reason - so all
+  four delegate to a shared private `_close_position(date, pos, price,
+  buysell, reason)`, which also appends the closed `Position` onto
+  `closed_trades` and debits `Broker.commission_per_trade` (a flat cash fee
+  charged once per fill, separate from `transaction_cost` - see `broker.py`
+  below - so it never touches the recorded price or the trade's own pnl).
+  `stop_loss()` fills at the worse of the order's own `stop_loss` level and
+  the day's actual low/high (`pdata['low']`/`pdata['high']`), modeling
+  slippage from a fast-market gap through the stop rather than always
+  capping the loss at the margin reserved at entry. `equity(date)`/
+  `equity_curve()` read back the daily `d_cash_bal`/`d_margin_bal`/
+  `net_open_position` series `Simulator.run()` already records each trading
+  day, giving cash + margin held + unrealized P&L as a single mark-to-market
+  net worth figure; `trade_pnls()` reads `closed_trades`' `term_notice.profitloss`
+  values back as a plain list - both are the inputs `stats.py` (below)
+  computes performance metrics from. `quantity_for_equity_fraction(date,
+  price, fraction, leverage=1)` turns a %-of-equity sizing rule into a
+  whole-unit quantity (`floor(equity(date) * fraction * leverage / price)`,
+  0 if that doesn't cover even one unit) - a primitive nothing currently
+  calls, since every shipped strategy still sizes its own way (a fixed `1`,
+  or a hand-computed share count). `net_quantity_by_instrument()` gives
+  `{instrument: net signed quantity}` across a trader's own open positions,
+  netting long/short lots on the same instrument against each other - each
+  `Order` always opens its own independent `Position` even for the same
+  instrument+direction already held (a deliberate lot-based model), so
+  nothing else gives this aggregate view without walking every open
+  position and grouping by instrument yourself.
 - `stats.py` — performance metrics computed off an `Account.equity_curve()`
   (`total_return`, `cagr`, `max_drawdown`, an annualized `sharpe_ratio` -
   reusing `marketdata/statistics.py`'s `mean`/`population_std_dev` on the
@@ -61,14 +79,34 @@ to be run from the repo root.
   `transaction_cost` - added against a buy, subtracted against a sell,
   defaulting to `0`; `execute_orders_to_close` passes the *closing* fill's
   own direction, the opposite of the position's own buysell, so cost is
-  charged on both legs of a round trip, not just the entry), opens/closes
-  `Position`s, checks stop-loss/take-profit levels against intraday
-  high/low, and updates account balances. `execute_orders_to_open` also
-  gates each order behind three optional, independently-off-by-default
-  portfolio risk limits - `max_open_positions_per_trader`,
-  `max_open_positions_per_instrument`, `max_margin_exposure_per_trader` -
-  rejecting with a `max_..._exceeded` receipt status rather than opening
-  the position when one is set and would be breached.
+  charged on both legs of a round trip, not just the entry). `apply_exit_cost`
+  applies that same cost convention to stop-loss/take-profit/expiry exits too
+  (given the position's own original direction rather than a fresh fill
+  direction), so every exit path pays the same `transaction_cost` an open or
+  an explicit close already do. `Broker` opens/closes `Position`s, checks
+  stop-loss/take-profit levels against intraday high/low, and updates account
+  balances. `execute_orders_to_open` also gates each order behind four
+  optional, independently-off-by-default portfolio risk limits -
+  `max_open_positions_per_trader`, `max_open_positions_per_instrument`,
+  `max_margin_exposure_per_trader` (netting a long and an offsetting short on
+  the same instrument against each other rather than summing every position's
+  margin regardless of direction), and `max_volume_fraction_per_fill` (every
+  trader's opening fills for an instrument share a same-day liquidity budget,
+  a fraction of that day's traded volume) - rejecting with a
+  `max_..._exceeded`/`exceeds_available_liquidity` receipt status rather than
+  opening the position when one is set and would be breached. An optional
+  `market_impact_factor` shifts an opening fill's price further unfavorably
+  in proportion to how much of that same shared liquidity budget earlier
+  fills have already consumed that day, so later fills pay a worse price
+  than earlier ones instead of every fill getting an identical price.
+  `commission_per_trade` is a flat cash fee (distinct from `transaction_cost`)
+  charged once per fill, both opening and closing - see `account.py` above
+  for how it's booked on close. `tighten_stop_loss(position, new_stop_loss)`
+  mutates an already-open position's `stop_loss` in place, but only in the
+  risk-reducing direction relative to its current level - the missing
+  in-place update mechanism a chandelier-style trailing stop needs, though
+  no shipped strategy calls it yet (see [Strategies](strategies.md)'s
+  `ATRTrendFollowingStrategy` entry).
 - `trader.py` — holds a strategy and an `Account`, submits orders, and drains its
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
@@ -103,13 +141,23 @@ to be run from the repo root.
   `from simagora.engine.strategy import ...` still works unchanged wherever it
   was already used.
 - `simulator.py` — drives the day-by-day simulation loop between a start and end
-  date. Takes an optional `transaction_cost` and the three `max_..._per_...`
-  risk limits (see `broker.py` above), all defaulting to `Broker`'s own
-  defaults and forwarded straight to it.
+  date. Takes optional `transaction_cost`/`commission_per_trade`/
+  `max_open_positions_per_trader`/`max_open_positions_per_instrument`/
+  `max_margin_exposure_per_trader`/`max_volume_fraction_per_fill`/
+  `market_impact_factor` (see `broker.py` above), all defaulting to
+  `Broker`'s own defaults and forwarded straight to it. `report_performance()`
+  logs/prints `stats.py`'s metrics (below) for every trader off its own
+  `equity_curve()`/`trade_pnls()`, alongside `plot()`'s matplotlib PNG - the
+  only two actual reporting surfaces a real run produces.
 
 ## `marketdata/`
 
-- `csvhandler.py` — parses OHLCV CSV rows into `Decimal`-typed dicts.
+- `csvhandler.py` — parses OHLCV CSV rows into `Decimal`-typed dicts, deriving
+  `adj_open`/`adj_high`/`adj_low` from each row's own `close`-to-`adj_close`
+  ratio (1, i.e. no adjustment, if `adj_close` is missing or non-positive) so
+  a strategy that switches its price field to the adjusted series gets an
+  internally consistent bar rather than an adjusted `close` mixed with raw
+  `open`/`high`/`low`. See [Data](data.md).
 - `statistics.py` — `mean`/`population_std_dev`, the plain arithmetic shared by
   `DataFeed`'s own `n_day_moving_avg`/`n_day_std_dev` and `Universe`'s
   `n_day_spread_moving_avg`/`n_day_spread_std_dev` below, so the formula lives
@@ -149,7 +197,8 @@ to be run from the repo root.
 ## Top level
 
 - `launcher.py` — `Launcher`/`main()`, the intended entry point; see
-  [Running](running.md). `simulate()`/`report()` both print an announcement, time
-  a call, print/log the elapsed time, and are both just
-  `Launcher._timed(announcement, label, fn)` with a different `fn`
-  (`self.sim.run`/`self.sim.plot`).
+  [Running](running.md). `simulate()` and `report()` each print an
+  announcement, time a call, and print/log the elapsed time via
+  `Launcher._timed(announcement, label, fn)`; `report()` calls it twice, for
+  `self.sim.plot` and `self.sim.report_performance` (see `simulator.py`
+  above).
