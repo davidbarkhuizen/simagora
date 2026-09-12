@@ -8,7 +8,8 @@ from simagora.domain.orderreceipt import OrderReceipt
 from simagora.domain.position import Position
 from simagora.engine.strategy import (
   MovingAverageCrossoverStrategy, TrendFollowingStrategy, MeanReversionStrategy,
-  MultiInstrumentStrategy, DualMomentumStrategy, resolve_strategy_class,
+  MultiInstrumentStrategy, DualMomentumStrategy, CrossSectionalMomentumStrategy,
+  resolve_strategy_class,
 )
 from simagora.engine.trader import Trader
 
@@ -259,6 +260,113 @@ class TestDualMomentumStrategy(unittest.TestCase):
     self.assertEqual(new_orders[0].ins, 'AAA')
 
 
+class _ShortLookbackCrossSectionalMomentum(CrossSectionalMomentumStrategy):
+  '''test-only: a 1-day lookback keeps fixtures small (default is 20)'''
+  lookback_window_days = 1
+
+
+class TestCrossSectionalMomentumStrategy(unittest.TestCase):
+  '''
+  exercises CrossSectionalMomentumStrategy end-to-end through a real
+  Trader, with a FakeUniverse standing in for Universe - AAA/BBB/CCC
+  fixtures are set up per test so day2's relative ranking is whatever
+  that test needs
+  '''
+
+  def make_trader(self, prices_by_ins, universe=('AAA', 'BBB', 'CCC'),
+                   end_date=DAY2, strategy_class=_ShortLookbackCrossSectionalMomentum):
+    feeds = {ins: FakeDataFeed(prices_by_ins[ins]) for ins in universe}
+    universe_feed = FakeUniverse(feeds)
+
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker) = make_broker(universe_feed)
+    trader = Trader(
+      universe_feed, broker, Decimal('10000'), universe[0], None, DAY1, end_date,
+      universe=list(universe))
+    trader.strategy = strategy_class(trader, DAY1, end_date)
+    return orderQ, broker, trader
+
+  def make_manual_position(self, broker, trader, ins, buysell='buy', execution_price=Decimal('100')):
+    order = Order(ins, buysell, 1, Decimal('1'), None, DAY1)
+    order.trader_id = trader.id
+    receipt = OrderReceipt(order, 'opened', execution_price, DAY1, Decimal('0'))
+    pos = Position(receipt)
+    broker.open_positions.append(pos)
+    broker.positions[pos.id] = pos
+    return pos
+
+  THREE_WAY_PRICES = {
+    'AAA': {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('110')}},  # +10% - top
+    'BBB': {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('102')}},  # +2%  - middle
+    'CCC': {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('95')}},   # -5%  - bottom
+  }
+
+  def test_no_signal_without_enough_preceding_history(self):
+    prices = {ins: {DAY1: {'close': Decimal('100')}} for ins in ('AAA', 'BBB', 'CCC')}
+    orderQ, broker, trader = self.make_trader(prices, end_date=DAY1)
+
+    trader.execute_strategy(DAY1)  # must not raise
+
+    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+
+  def test_goes_long_the_top_performer_and_short_the_bottom(self):
+    orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
+
+    trader.execute_strategy(DAY2)
+
+    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    by_ins = {o.ins: o.buysell for o in orders}
+    self.assertEqual(by_ins, {'AAA': 'buy', 'CCC': 'sell'})  # BBB (middle) untouched
+    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))), 0)
+
+  def test_holds_existing_long_and_short_without_churn_when_unchanged(self):
+    orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
+    self.make_manual_position(broker, trader, 'AAA', 'buy')
+    self.make_manual_position(broker, trader, 'CCC', 'sell')
+
+    trader.execute_strategy(DAY2)
+
+    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))), 0)
+
+  def test_rotates_out_of_stale_positions_into_the_new_ranking(self):
+    orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
+    # yesterday's ranking had this backwards
+    stale_long = self.make_manual_position(broker, trader, 'CCC', 'buy')
+    stale_short = self.make_manual_position(broker, trader, 'AAA', 'sell')
+
+    trader.execute_strategy(DAY2)
+
+    close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    self.assertEqual(
+      {co.position_id for co in close_orders},
+      {stale_long.id, stale_short.id})
+
+    new_orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    by_ins = {o.ins: o.buysell for o in new_orders}
+    self.assertEqual(by_ins, {'AAA': 'buy', 'CCC': 'sell'})
+
+  def test_top_and_bottom_do_not_overlap_in_a_universe_too_small_to_fill_both(self):
+    class _BothSides(_ShortLookbackCrossSectionalMomentum):
+      top_n = 2
+      bottom_n = 2
+
+    two_way_prices = {
+      'AAA': {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('110')}},  # +10%
+      'BBB': {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('102')}},  # +2%
+    }
+    orderQ, broker, trader = self.make_trader(
+      two_way_prices, universe=('AAA', 'BBB'), strategy_class=_BothSides)
+
+    trader.execute_strategy(DAY2)
+
+    # top 2 of 2 and bottom 2 of 2 are the same two instruments - the
+    # short side must be dropped entirely rather than shorting and
+    # going long the same instrument at once
+    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    by_ins = {o.ins: o.buysell for o in orders}
+    self.assertEqual(by_ins, {'AAA': 'buy', 'BBB': 'buy'})
+
+
 class TestResolveStrategyClass(unittest.TestCase):
 
   def test_known_names_resolve_to_the_matching_class(self):
@@ -266,6 +374,7 @@ class TestResolveStrategyClass(unittest.TestCase):
     self.assertIs(resolve_strategy_class('trend'), TrendFollowingStrategy)
     self.assertIs(resolve_strategy_class('meanreversion'), MeanReversionStrategy)
     self.assertIs(resolve_strategy_class('dualmomentum'), DualMomentumStrategy)
+    self.assertIs(resolve_strategy_class('crosssectionalmomentum'), CrossSectionalMomentumStrategy)
 
   def test_none_resolves_to_the_default(self):
     self.assertIs(resolve_strategy_class(None), MovingAverageCrossoverStrategy)

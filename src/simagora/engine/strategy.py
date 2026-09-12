@@ -303,11 +303,89 @@ class DualMomentumStrategy(MultiInstrumentStrategy):
     self.submit_order(buy_order)
 
 
+class CrossSectionalMomentumStrategy(MultiInstrumentStrategy):
+  '''
+  Cross-sectional momentum: ranks trader.universe by trailing
+  lookback_window_days return (n_day_return) each day, goes long the
+  top_n best performers and short (sell) the bottom_n worst, and
+  closes any of the trader's own open positions whose instrument/
+  direction has fallen out of that set. Re-evaluated daily rather than
+  the classic monthly/quarterly rebalance, but a position already held
+  in its currently-desired direction is left alone rather than
+  churned.
+
+  Unlike DualMomentumStrategy (a single long position, or cash), this
+  is long AND short at once - shorting is exactly as well-supported by
+  Broker/Account as going long (see _signed_pdelta in account.py,
+  already exercised by MovingAverageCrossoverStrategy/
+  TrendFollowingStrategy's own 'sell' orders), so no new engine
+  capability was needed for this one either. Every order still carries
+  a protective stop_loss_margin band, same reason as DualMomentumStrategy.
+  '''
+
+  lookback_window_days = 20
+  top_n = 1
+  bottom_n = 1
+  stop_loss_margin = Decimal('0.05')  # 5 %
+
+  def rank_universe(self, date):
+    '''{instrument: n_day_return}, dropping instruments without enough trailing history yet'''
+    returns = {}
+    for ins in self.universe:
+      ret = self.datafeed.n_day_return(ins, date, 'close', self.lookback_window_days)
+      if (ret is not None):
+        returns[ins] = ret
+    return returns
+
+  def open_positions_by_instrument_and_direction(self):
+    '''{(instrument, buysell): [positions]} of this trader's own currently open positions'''
+    by_key = {}
+    open_positions = self.trader.broker.get_open_positions_for_trader(self.trader.id)
+    for pos in open_positions:
+      order = pos.order_receipt.order
+      by_key.setdefault((order.ins, order.buysell), []).append(pos)
+    return by_key
+
+  def close_positions(self, positions, date):
+    for pos in positions:
+      self.submit_order(CloseOrder(pos.id, date))
+
+  def execute(self, date):
+    returns = self.rank_universe(date)
+    if (len(returns) == 0):
+      # not enough trailing history anywhere yet
+      return
+
+    ranked = sorted(returns, key=returns.get, reverse=True)
+    longs = set(ranked[:self.top_n])
+    shorts = set(ranked[-self.bottom_n:]) if (self.bottom_n > 0) else set()
+    shorts -= longs  # guard a universe too small to fill both sides distinctly
+
+    desired = set((ins, 'buy') for ins in longs) | set((ins, 'sell') for ins in shorts)
+    open_by_key = self.open_positions_by_instrument_and_direction()
+
+    # CLOSE POSITIONS THAT FELL OUT OF THE DESIRED SET
+    for key, positions in open_by_key.items():
+      if (key not in desired):
+        self.close_positions(positions, date)
+
+    # OPEN WHATEVER'S DESIRED AND NOT ALREADY HELD
+    for (ins, buysell) in desired:
+      if ((ins, buysell) in open_by_key):
+        continue
+      cur_price = self.datafeed.get_price(ins, date, 'close')
+      margin = (1 - self.stop_loss_margin) if (buysell == 'buy') else (1 + self.stop_loss_margin)
+      stop_loss_level = cur_price * margin
+      order = Order(ins, buysell, 1, stop_loss_level, None, date)
+      self.submit_order(order)
+
+
 STRATEGY_REGISTRY = {
   'movavg': MovingAverageCrossoverStrategy,
   'trend': TrendFollowingStrategy,
   'meanreversion': MeanReversionStrategy,
   'dualmomentum': DualMomentumStrategy,
+  'crosssectionalmomentum': CrossSectionalMomentumStrategy,
 }
 
 DEFAULT_STRATEGY_NAME = 'movavg'

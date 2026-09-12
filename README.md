@@ -65,7 +65,7 @@ to be run from the repo root.
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
   being silently discarded.
-- `strategy.py` — four strategies, all sharing `BaseStrategy` for trader/datafeed
+- `strategy.py` — five strategies, all sharing `BaseStrategy` for trader/datafeed
   wiring, order submission, and `log_self()`; split into `SingleInstrumentStrategy`/
   `MultiInstrumentStrategy` for what instrument(s) they trade (see Multi-instrument
   support below). Selected by name (see Strategies below) via
@@ -158,6 +158,18 @@ below) — each element is a registry name, looked up in `strategy.STRATEGY_REGI
   but every buy still carries a protective 5% `stop_loss_margin`, since
   `Broker.execute_orders_to_open` requires a `stop_loss` on every order to size
   margin.
+- **`'crosssectionalmomentum'`** — `CrossSectionalMomentumStrategy`, also a
+  `MultiInstrumentStrategy`. Ranks `trader.universe` by trailing 20-day return
+  each day, goes long the single best performer and short (`'sell'`) the single
+  worst (`top_n`/`bottom_n`, both default 1), and closes any of the trader's own
+  open positions whose instrument/direction has fallen out of that set — a
+  position already held in its currently-desired direction is left alone. Unlike
+  `DualMomentumStrategy` there's no absolute-momentum cash filter and no
+  guaranteed floor on the short leg's return - it's always long the top and short
+  the bottom of whatever the universe offers that day. Shorting needed no new
+  engine capability - `Account`'s P&L math (`_signed_pdelta`) is already symmetric
+  between `'buy'`/`'sell'`, the same mechanism `MovingAverageCrossoverStrategy`/
+  `TrendFollowingStrategy` already use for their own `'sell'` signals.
 
 An unrecognized name raises `ValueError` rather than silently falling back to a
 default, so a typo doesn't quietly run the wrong strategy; `None` (what every
@@ -165,8 +177,9 @@ default, so a typo doesn't quietly run the wrong strategy; `None` (what every
 strategy loads) resolves to `'movavg'`.
 
 The first three strategies above are single-instrument (`SingleInstrumentStrategy`
-reads `trader.instrument`); `DualMomentumStrategy` is the one multi-instrument
-strategy — see Multi-instrument support below for the plumbing it's built on.
+reads `trader.instrument`); `DualMomentumStrategy` and `CrossSectionalMomentumStrategy`
+are multi-instrument — see Multi-instrument support below for the plumbing they're
+built on.
 
 ## Multi-instrument support
 
@@ -221,6 +234,11 @@ was handed.
   built on this: it subclasses `MultiInstrumentStrategy`, ranks `self.universe` by
   `self.datafeed.n_day_return(...)` each day, and rotates its single long position
   into the leader.
+- **`CrossSectionalMomentumStrategy`** (see Strategies above) is the second: same
+  ranking mechanism, but long the top performer(s) *and* short the bottom one(s)
+  at once, rather than a single rotating long/cash position. Confirms shorting
+  needed no engine changes either - `Account`'s `_signed_pdelta` P&L math was
+  already symmetric between `'buy'`/`'sell'`.
 
 ## Position closing
 
@@ -240,7 +258,9 @@ A position closes the same day one of the following happens, in this order:
    fires. Either way this happens rather than leaving the position to run until
    stop-loss/take-profit/expiry. `DualMomentumStrategy` submits one whenever the
    leader changes (rotating out of the old one) or the absolute-momentum filter
-   trips (rotating fully to cash).
+   trips (rotating fully to cash). `CrossSectionalMomentumStrategy` submits one
+   for each open position whose instrument/direction has fallen out of the
+   current top/bottom ranking.
 
 ## Setup
 
