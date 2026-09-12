@@ -8,7 +8,7 @@ resulting orders to a simulated broker for execution the following day. Executio
 "realistic" in that the broker fills orders at a price between the day's high and low
 rather than at an exact known price.
 
-Per the project's original design notes, the design has 3 conceptual agents:
+The design has 3 conceptual agents:
 
 1. **Trader** — runs a strategy and owns an account.
 2. **Broker** — receives orders from the trader, determines execution price, and
