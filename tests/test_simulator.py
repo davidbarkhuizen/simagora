@@ -122,7 +122,7 @@ class TestPlotCreatesMissingPlotDirectory(unittest.TestCase):
   '''
   plot() previously assumed 'plot/' already existed relative to cwd -
   fig.savefig() raises FileNotFoundError otherwise, which is exactly
-  what a fresh checkout's first real run hits (see docs/engine-review.md)
+  what a fresh checkout's first real run hits
   '''
 
   def setUp(self):

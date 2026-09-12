@@ -113,9 +113,9 @@ class Broker(object):
   def tighten_stop_loss(self, position, new_stop_loss):
     '''
     move an already-open position's stop_loss to new_stop_loss, in
-    place - the missing "in-place stop_loss update mechanism" noted in
-    docs/engine-review.md (ATRTrendFollowingStrategy's docstring),
-    needed for chandelier-style trailing stops. Only ever allowed to
+    place - the in-place stop_loss update mechanism needed for
+    chandelier-style trailing stops, where a strategy re-tightens its
+    stop daily as a position moves favorably. Only ever allowed to
     move in the risk-reducing direction relative to the position's
     CURRENT stop_loss - up for a long, down for a short - never past
     it, and never the reverse. Never requires recalculating margin:
