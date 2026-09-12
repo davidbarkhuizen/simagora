@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-from ...domain.order import Order
 from .strategy_base import SingleInstrumentStrategy
 
 class MeanReversionBase(SingleInstrumentStrategy):
@@ -28,7 +27,4 @@ class MeanReversionBase(SingleInstrumentStrategy):
 
     ins = self.instrument
     cur_price = self.datafeed.get_price(ins, date, 'close')
-    order = Order(ins, signal, 1,
-      self.stop_loss_level(cur_price, signal, self.stop_loss_margin),
-      self.take_profit_level(cur_price, signal, self.take_profit_margin), date)
-    self.submit_order(order)
+    self.submit_banded_order(ins, signal, 1, cur_price, self.stop_loss_margin, self.take_profit_margin, date)

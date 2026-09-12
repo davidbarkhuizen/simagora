@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-from ...domain.order import Order
 from ...domain.closeorder import CloseOrder
 from .strategy_base import SingleInstrumentStrategy
 
@@ -47,19 +46,13 @@ class MovingAverageCrossoverBase(SingleInstrumentStrategy):
 
     if (fast > slow):
       # SUBMIT NEW BUY ORDER
-      buy_order = Order(ins, 'buy', 1,
-        self.stop_loss_level(cur_price, 'buy', self.stop_loss_margin),
-        self.take_profit_level(cur_price, 'buy', self.take_profit_margin), date)
-      self.submit_order(buy_order)
+      self.submit_banded_order(ins, 'buy', 1, cur_price, self.stop_loss_margin, self.take_profit_margin, date)
 
       # CLOSE OUT EXISTING IN THE MONEY BUY POSITIONS
       self.close_in_the_money_positions(date, 'buy')
     elif (fast < slow):
       # SUBMIT NEW SELL ORDER
-      sell_order = Order(ins, 'sell', 1,
-        self.stop_loss_level(cur_price, 'sell', self.stop_loss_margin),
-        self.take_profit_level(cur_price, 'sell', self.take_profit_margin), date)
-      self.submit_order(sell_order)
+      self.submit_banded_order(ins, 'sell', 1, cur_price, self.stop_loss_margin, self.take_profit_margin, date)
 
       # CLOSE OUT EXISTING IN THE MONEY SELL POSITIONS
       self.close_in_the_money_positions(date, 'sell')
