@@ -751,6 +751,26 @@ class TestPairsTradingStrategy(unittest.TestCase):
     close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
     self.assertEqual({co.position_id for co in close_orders}, {pos_a.id, pos_b.id})
 
+  def test_closes_a_lone_surviving_leg_instead_of_treating_it_as_a_complete_pair(self):
+    # only one leg of the pair is open - the other was rejected when
+    # the pair was opened, or has since been stopped out on its own.
+    # z-score here (see class docstring) is +3, solidly in entry
+    # territory: if this lone leg were mistaken for a complete pair,
+    # the revert-and-close check (|z| <= exit_z_score=0.5) would leave
+    # it open; if mistaken for no position at all, a fresh pair would
+    # be opened instead. Neither should happen - the naked leg is
+    # closed on its own
+    orderQ, broker, trader, today = self.make_trader(Decimal('200'), Decimal('100'))
+    lone_leg = make_manual_position(broker, trader, 'AAA', 'sell')
+
+    trader.execute_strategy(today)
+
+    close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    self.assertEqual([co.position_id for co in close_orders], [lone_leg.id])
+
+    new_orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    self.assertEqual(len(new_orders), 0)
+
 
 if __name__ == '__main__':
   unittest.main()

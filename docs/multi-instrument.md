@@ -22,7 +22,7 @@ counterpart used when a strategy trades across more than one.
   `Universe.date_is_trading_day()` is a *union* across the whole universe - true if
   *any* tracked instrument trades that date - so a date can be valid for one
   instrument and not another (different exchange holidays, different asset
-  classes). Three places degrade gracefully rather than crashing on the resulting
+  classes). Four places degrade gracefully rather than crashing on the resulting
   `None` price lookup:
   - `Trader.execute_strategy()` skips calling into the strategy entirely on a day
     the trader's own instrument has no data (checked directly - no way to ask a
@@ -35,6 +35,10 @@ counterpart used when a strategy trades across more than one.
   - `Broker.manage_open_positions` leaves a position alone for the day if its
     instrument has no data, rather than checking take-profit/stop-loss/expiry
     against a missing high/low/close.
+  - `Account.tally_individual_open_positions` leaves a position's mark-to-market
+    history untouched for the day if its instrument has no data, rather than
+    crashing on a missing close price; `record_net_end_of_day_pos` treats that
+    day's untallied entry as a zero contribution rather than a missing key.
 - **`BaseStrategy` carries only instrument-agnostic concerns.** `engine/strategy.py`'s
   `BaseStrategy` handles the shared trader/datafeed wiring, order submission,
   `open_positions()` (this trader's own currently open positions, straight off

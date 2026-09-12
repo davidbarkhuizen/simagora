@@ -470,6 +470,14 @@ class PairsTradingStrategy(MultiInstrumentStrategy):
   this strategy doesn't attempt, so this is a directionally
   market-neutral (long one leg, short the other) approximation, not a
   precisely dollar-neutral one.
+
+  The two legs aren't opened atomically - each is its own independent
+  Order, so one can be rejected (insufficient cash, gapped through its
+  own stop-loss) while the other opens, or one can later be stopped
+  out on its own while the other survives. Either way leaves a naked
+  single-leg position; execute() detects this (exactly one of the
+  pair's two legs open) and closes it immediately rather than treating
+  it as a complete, hedged pair.
   '''
 
   lookback_window_days = 20
@@ -515,19 +523,31 @@ class PairsTradingStrategy(MultiInstrumentStrategy):
     self.submit_order(Order(short_ins, 'sell', 1, short_stop, None, date))
 
   def execute(self, date):
+    open_positions = self._pair_positions()
+
+    if (len(open_positions) == 1):
+      # down to exactly one leg - either the other leg was rejected
+      # when the pair was opened (insufficient cash, gapped through
+      # its own stop-loss, ...) or it has since been stopped out on
+      # its own. Either way this is now a naked, unhedged position
+      # that violates the strategy's market-neutral invariant - close
+      # it immediately rather than treating it as a complete pair and
+      # running the z-score exit test against it
+      self.close_positions(open_positions, date)
+      return
+
     stats = self._spread_stats(date)
     if (stats is None):
       return
     spread, mean, std_dev = stats
 
-    open_positions = self._pair_positions()
-
     if (len(open_positions) > 0):
-      # already holding a pair - close it once the spread is back
-      # within exit_z_score of its own mean. Zero variance means every
-      # trailing value (today's own spread included) already equals
-      # the mean exactly - the limiting case of a zero z-score - so
-      # treat that as fully reverted too, rather than as "no signal"
+      # already holding a complete (both-legs) pair - close it once
+      # the spread is back within exit_z_score of its own mean. Zero
+      # variance means every trailing value (today's own spread
+      # included) already equals the mean exactly - the limiting case
+      # of a zero z-score - so treat that as fully reverted too,
+      # rather than as "no signal"
       reverted = (std_dev == 0) or (abs((spread - mean) / std_dev) <= self.exit_z_score)
       if reverted:
         self.close_positions(open_positions, date)

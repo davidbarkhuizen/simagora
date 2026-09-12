@@ -85,7 +85,12 @@ Selected by the `strat` list passed to `Launcher()`/`Simulator()` (see
   single unit of each leg rather than a dollar/beta-neutral hedge ratio - true
   market-neutral sizing needs a rolling beta calculation this strategy doesn't
   attempt, so this is a directionally market-neutral approximation, not a
-  precisely dollar-neutral one.
+  precisely dollar-neutral one. The two legs aren't opened atomically (each is
+  its own independent `Order`), so one can be rejected while the other opens, or
+  one can later be stopped out on its own while the other survives; either way
+  leaves a naked single-leg position, which `execute()` detects (exactly one of
+  the pair's two legs open) and closes immediately rather than treating it as a
+  complete, hedged pair.
 
 An unrecognized name raises `ValueError` rather than silently falling back to a
 default, so a typo doesn't quietly run the wrong strategy; `None` (what every

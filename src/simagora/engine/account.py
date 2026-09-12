@@ -163,9 +163,15 @@ class Account(HasAutoId):
     '''
     for pos in self.broker.get_open_positions_for_trader(self.trader_id):
       order = pos.order_receipt.order
-      receipt = pos.order_receipt    
-      
+      receipt = pos.order_receipt
+
       pdata = self.broker.datafeed.get_price_info(order.ins, date)
+      if (pdata is None):
+        # this position's instrument has no data today (only reachable
+        # with a multi-instrument Universe whose instruments don't all
+        # share the same trading calendar) - leave it untallied for
+        # today rather than crash on a missing close price
+        continue
 
       pdelta, in_the_money = _pdelta_and_moneyness(order.buysell, receipt.execution_price, pdata['close'])
 
@@ -177,10 +183,13 @@ class Account(HasAutoId):
         pos.history[date] = (- loss)
 
   def record_net_end_of_day_pos(self, date):
-    total = Decimal(0)    
+    total = Decimal(0)
     open_positions = self.broker.get_open_positions_for_trader(self.trader_id)
     for pos in open_positions:
-      local_net = pos.history[date]
+      # a position tally_individual_open_positions left untallied
+      # today (its instrument had no data) contributes nothing rather
+      # than crashing on a missing history entry
+      local_net = pos.history.get(date, Decimal(0))
       total += local_net
     self.net_open_position[date] = total
 
