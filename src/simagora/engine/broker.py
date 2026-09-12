@@ -85,11 +85,43 @@ class Broker(object):
     ]
     return len(same_instrument) >= self.max_open_positions_per_instrument
 
-  def _exceeds_max_margin_exposure_per_trader(self, trader, margin):
-    '''True if this order's margin would put its trader over max_margin_exposure_per_trader (no limit if None)'''
+  def _net_margin_exposure_for_trader(self, trader_id, extra_ins=None, extra_signed_margin=Decimal(0)):
+    '''
+    net margin exposure across a trader's open positions, optionally
+    including one additional not-yet-opened order's own signed margin
+    against extra_ins (positive for a buy, negative for a sell) - each
+    instrument's margin is signed by direction and summed first, so a
+    long and an offsetting short on the same instrument net against
+    each other, then the magnitudes of those per-instrument sums are
+    added across instruments. Same-direction positions (whether on the
+    same instrument or different ones) still add up undiminished -
+    netting only ever reduces exposure between opposite directions on
+    the same instrument.
+    '''
+    by_instrument = {}
+    for pos in self.get_open_positions_for_trader(trader_id):
+      order = pos.order_receipt.order
+      signed_margin = pos.order_receipt.margin if (order.buysell == 'buy') else -pos.order_receipt.margin
+      by_instrument[order.ins] = by_instrument.get(order.ins, Decimal(0)) + signed_margin
+
+    if (extra_ins is not None):
+      by_instrument[extra_ins] = by_instrument.get(extra_ins, Decimal(0)) + extra_signed_margin
+
+    return sum(abs(v) for v in by_instrument.values())
+
+  def _exceeds_max_margin_exposure_per_trader(self, order, margin):
+    '''
+    True if opening order would put its trader over
+    max_margin_exposure_per_trader (no limit if None) - nets a long and
+    an offsetting short on the same instrument against each other via
+    _net_margin_exposure_for_trader, rather than summing every open
+    position's margin regardless of direction
+    '''
     if (self.max_margin_exposure_per_trader is None):
       return False
-    return (trader.ac.margin_bal + margin) > self.max_margin_exposure_per_trader
+    signed_margin = margin if (order.buysell == 'buy') else -margin
+    net_exposure = self._net_margin_exposure_for_trader(order.trader_id, order.ins, signed_margin)
+    return net_exposure > self.max_margin_exposure_per_trader
 
   def _calc_execution_price_or_reject(self, order, ins, buysell, date):
     '''
@@ -148,7 +180,7 @@ class Broker(object):
         receipt = OrderReceipt(order, 'max_open_positions_per_trader_exceeded', 0, date, 0)
       elif (self._exceeds_max_open_positions_per_instrument(order)):
         receipt = OrderReceipt(order, 'max_open_positions_per_instrument_exceeded', 0, date, 0)
-      elif (self._exceeds_max_margin_exposure_per_trader(trader, margin)):
+      elif (self._exceeds_max_margin_exposure_per_trader(order, margin)):
         receipt = OrderReceipt(order, 'max_margin_exposure_per_trader_exceeded', 0, date, 0)
       elif (margin > trader.ac.cash_bal):
         receipt = OrderReceipt(order, 'insufficient_cash_bal', 0, date, 0)

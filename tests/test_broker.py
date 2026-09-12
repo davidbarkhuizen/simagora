@@ -360,6 +360,44 @@ class TestPortfolioRiskLimits(unittest.TestCase):
     receipts = receiptQ.extract_matching(lambda r: r.order is order)
     self.assertEqual(receipts[0].status, 'max_margin_exposure_per_trader_exceeded')
 
+  def test_max_margin_exposure_per_trader_nets_offsetting_long_and_short_on_the_same_instrument(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1,
+                              max_margin_exposure_per_trader=Decimal('15'))
+
+    open_position(trader, broker, DAY1)  # buy, margin = 100-90 = 10, net exposure now 10
+
+    # an offsetting sell on the same instrument nets to ~0 exposure
+    # (10 - 10 = 0), well under the cap - even though summing every
+    # position's margin regardless of direction (10 + 10 = 20) would
+    # have rejected it
+    sell_order = Order('s&p500', 'sell', 1, Decimal('110'), Decimal('90'), DAY1)
+    trader.submit_order(sell_order)
+    broker.execute_orders_to_open(DAY1)
+
+    self.assertEqual(len(broker.open_positions), 2)
+    receipts = receiptQ.extract_matching(lambda r: r.order is sell_order)
+    self.assertEqual(receipts[0].status, 'opened')
+
+  def test_max_margin_exposure_per_trader_still_sums_same_direction_across_instruments(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1,
+                              max_margin_exposure_per_trader=Decimal('15'))
+
+    open_position(trader, broker, DAY1, ins='AAA')  # buy, margin = 10, net exposure now 10
+
+    # a second buy on a DIFFERENT instrument doesn't net against the
+    # first - net exposure is still 10 + 10 = 20 > 15
+    order = Order('BBB', 'buy', 1, Decimal('90'), Decimal('110'), DAY1)
+    trader.submit_order(order)
+    broker.execute_orders_to_open(DAY1)
+
+    self.assertEqual(len(broker.open_positions), 1)
+    receipts = receiptQ.extract_matching(lambda r: r.order is order)
+    self.assertEqual(receipts[0].status, 'max_margin_exposure_per_trader_exceeded')
+
 
 class TestPositionExpired(unittest.TestCase):
 
