@@ -45,11 +45,13 @@ class TestPnlScalesWithQuantity(unittest.TestCase):
 
     broker.manage_open_positions(DAY2)
 
-    # stop_loss triggers: low(85) <= stop_loss(90) -> forfeits the entire
-    # (already 5x-scaled) margin; cash_bal unaffected since it's a full loss
+    # stop_loss triggers: low(85) <= stop_loss(90), and gaps past it -
+    # fills at the worse low(85) instead of the trigger level, so the
+    # loss exceeds the margin reserved at entry: pdelta = 85-100 = -15
+    # (vs. -10 == -margin with no gap), * qty(5) * leverage(1) = -75
     self.assertEqual(trader.ac.margin_bal, Decimal('0'))
-    self.assertEqual(trader.ac.cash_bal, Decimal('9950'))
-    self.assertEqual(trader.ac.net_booked_position, Decimal('-50'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9925'))
+    self.assertEqual(trader.ac.net_booked_position, Decimal('-75'))
 
   def test_close_at_price_scales_with_quantity(self):
     datafeed = FakeDataFeed({
@@ -137,11 +139,12 @@ class TestPnlScalesWithLeverage(unittest.TestCase):
 
     broker.manage_open_positions(DAY2)
 
-    # stop_loss triggers: low(85) <= stop_loss(90) -> forfeits the entire
-    # (already 2x-leveraged) margin; cash_bal unaffected since it's a full loss
+    # stop_loss triggers: low(85) <= stop_loss(90), and gaps past it -
+    # fills at the worse low(85): pdelta = 85-100 = -15 (vs. -10 == -margin
+    # with no gap), * qty(1) * leverage(2) = -30
     self.assertEqual(trader.ac.margin_bal, Decimal('0'))
-    self.assertEqual(trader.ac.cash_bal, Decimal('9980'))
-    self.assertEqual(trader.ac.net_booked_position, Decimal('-20'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9970'))
+    self.assertEqual(trader.ac.net_booked_position, Decimal('-30'))
 
   def test_close_at_price_scales_with_leverage(self):
     datafeed = FakeDataFeed({
@@ -194,8 +197,9 @@ class TestClosedTrades(unittest.TestCase):
 
     broker.manage_open_positions(DAY2)  # stop_loss triggers: low(85) <= 90
 
+    # gaps past the trigger - fills at low(85): pdelta = -15, * qty(5) = -75
     self.assertEqual(trader.ac.closed_trades, [pos])
-    self.assertEqual(trader.ac.trade_pnls(), [Decimal('-50')])
+    self.assertEqual(trader.ac.trade_pnls(), [Decimal('-75')])
 
   def test_close_at_price_records_the_closed_position_and_its_pnl(self):
     datafeed = FakeDataFeed({
@@ -231,15 +235,16 @@ class TestClosedTrades(unittest.TestCase):
     })
     (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
       make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
-    first = open_position(trader, broker, DAY1, quantity=1)   # margin/loss = 10
-    second = open_position(trader, broker, DAY1, quantity=2)  # margin/loss = 20
+    first = open_position(trader, broker, DAY1, quantity=1)   # margin = 10, gapped loss = 15
+    second = open_position(trader, broker, DAY1, quantity=2)  # margin = 20, gapped loss = 30
 
-    broker.manage_open_positions(DAY2)  # both stop out: low(85) <= stop_loss(90)
+    broker.manage_open_positions(DAY2)  # both stop out: low(85) <= stop_loss(90), gapping past it
 
     # manage_open_positions walks open_positions newest-first (idx counts
-    # down), so `second` (opened later) closes - and is recorded - first
+    # down), so `second` (opened later) closes - and is recorded - first;
+    # both fill at the worse low(85): pdelta = -15 per unit
     self.assertEqual(trader.ac.closed_trades, [second, first])
-    self.assertEqual(trader.ac.trade_pnls(), [Decimal('-20'), Decimal('-10')])
+    self.assertEqual(trader.ac.trade_pnls(), [Decimal('-30'), Decimal('-15')])
 
 
 class TestEquity(unittest.TestCase):
