@@ -49,13 +49,22 @@ to be run from the repo root.
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
   being silently discarded.
-- `strategy.py` — eight strategies, all sharing `BaseStrategy` for trader/datafeed
-  wiring, order submission, and `log_self()`; split into `SingleInstrumentStrategy`/
-  `MultiInstrumentStrategy` for what instrument(s) they trade (see
-  [Multi-instrument support](multi-instrument.md)). Selected by name (see
-  [Strategies](strategies.md)) via `STRATEGY_REGISTRY`/`resolve_strategy_class()`,
-  which `Trader.load_strategy()` calls with the `strategy_name` it was constructed
-  with.
+- `strategy/` — a package: eight strategies, one per file, all sharing
+  `strategy_base.py`'s `BaseStrategy` for trader/datafeed wiring, order
+  submission, and `log_self()` (which now logs the concrete strategy's own
+  file, via `inspect.getfile()`, rather than one shared module); split into
+  `SingleInstrumentStrategy`/`MultiInstrumentStrategy` for what instrument(s)
+  they trade (see [Multi-instrument support](multi-instrument.md)). Selected
+  by name (see [Strategies](strategies.md)) via `registry.py`'s
+  `STRATEGY_REGISTRY`/`resolve_strategy_class()`, which `Trader.load_strategy()`
+  calls with the `strategy_name` it was constructed with. `registry.py` is a
+  separate module from `strategy_base.py` since it must import every concrete
+  strategy file to build the registry - that dependency runs the opposite way
+  from the base classes each concrete file imports, so the two can't live in
+  the same module without a circular import. `__init__.py` re-exports every
+  name (base classes, concrete strategies, the registry) so
+  `from simagora.engine.strategy import ...` still works unchanged wherever it
+  was already used.
 - `simulator.py` — drives the day-by-day simulation loop between a start and end date.
 
 ## `marketdata/`

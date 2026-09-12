@@ -39,7 +39,7 @@ counterpart used when a strategy trades across more than one.
     history untouched for the day if its instrument has no data, rather than
     crashing on a missing close price; `record_net_end_of_day_pos` treats that
     day's untallied entry as a zero contribution rather than a missing key.
-- **`BaseStrategy` carries only instrument-agnostic concerns.** `engine/strategy.py`'s
+- **`BaseStrategy` carries only instrument-agnostic concerns.** `engine/strategy/strategy_base.py`'s
   `BaseStrategy` handles the shared trader/datafeed wiring, order submission,
   `open_positions()` (this trader's own currently open positions, straight off
   `Broker.get_open_positions_for_trader()` - every strategy that manages its own

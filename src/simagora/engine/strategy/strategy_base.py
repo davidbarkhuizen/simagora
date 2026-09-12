@@ -1,0 +1,103 @@
+import inspect
+import logging
+
+from ...domain.closeorder import CloseOrder
+
+class BaseStrategy(object):
+  '''
+  shared plumbing for every strategy: trader/datafeed wiring, order
+  submission, and logging a concrete strategy's own source file for
+  the run's audit trail. Doesn't say anything about what instrument(s)
+  a strategy trades - see SingleInstrumentStrategy/MultiInstrumentStrategy.
+  '''
+
+  def __init__(self, trader, start_date, end_date):
+    self.trader = trader
+    self.datafeed = trader.datafeed
+
+    self.start_date = start_date
+    self.end_date = end_date
+
+  def submit_order(self, order):
+    self.trader.submit_order(order)
+
+  def open_positions(self):
+    '''this trader's own currently open positions, across every instrument it might hold'''
+    return self.trader.broker.get_open_positions_for_trader(self.trader.id)
+
+  def stop_loss_level(self, price, buysell, margin):
+    '''price adjusted margin against a buysell position - below price for a buy, above for a sell'''
+    return price * (1 - margin) if (buysell == 'buy') else price * (1 + margin)
+
+  def take_profit_level(self, price, buysell, margin):
+    '''price adjusted margin in favor of a buysell position - above price for a buy, below for a sell'''
+    return price * (1 + margin) if (buysell == 'buy') else price * (1 - margin)
+
+  def log_self(self):
+    '''log this strategy's own source file, line by line, for the run's audit trail'''
+    source_file = inspect.getfile(type(self))
+    with open(source_file, 'r') as f:
+      lines = [line.rstrip('\n') for line in f]
+
+    for line in lines:
+      logging.info(line)
+
+  def execute(self, date):
+    raise NotImplementedError
+
+
+class SingleInstrumentStrategy(BaseStrategy):
+  '''a strategy that trades exactly trader.instrument'''
+
+  def __init__(self, trader, start_date, end_date):
+    BaseStrategy.__init__(self, trader, start_date, end_date)
+    self.instrument = trader.instrument
+
+
+class MultiInstrumentStrategy(BaseStrategy):
+  '''
+  a strategy that trades across trader.universe. Bundles the plumbing
+  shared by every ranking/rotation strategy below it (DualMomentum,
+  CrossSectionalMomentum, LowVolatility all rank the universe by some
+  metric, then reconcile currently-open positions against whatever
+  that ranking currently wants) so a new one doesn't have to
+  re-implement it.
+  '''
+
+  def __init__(self, trader, start_date, end_date):
+    BaseStrategy.__init__(self, trader, start_date, end_date)
+    self.universe = trader.universe
+
+  def rank_universe(self, metric_fn):
+    '''
+    {instrument: metric_fn(instrument)} for every self.universe
+    instrument metric_fn doesn't return None for - an instrument
+    metric_fn can't yet score (e.g. not enough trailing history) is
+    dropped rather than ranked last, since "no score yet" isn't the
+    same as "worst"
+    '''
+    ranked = {}
+    for ins in self.universe:
+      value = metric_fn(ins)
+      if (value is not None):
+        ranked[ins] = value
+    return ranked
+
+  def open_positions_by(self, key_fn, filter_fn=None):
+    '''
+    {key_fn(order): [positions]} of this trader's own currently open
+    positions, keyed however the caller likes (by instrument, by
+    (instrument, buysell), ...); filter_fn(order), if given, excludes
+    any position it returns False for (e.g. lambda o: o.buysell == 'buy')
+    '''
+    by_key = {}
+    for pos in self.open_positions():
+      order = pos.order_receipt.order
+      if (filter_fn is not None) and (not filter_fn(order)):
+        continue
+      by_key.setdefault(key_fn(order), []).append(pos)
+    return by_key
+
+  def close_positions(self, positions, date):
+    for pos in positions:
+      self.submit_order(CloseOrder(pos.id, date))
