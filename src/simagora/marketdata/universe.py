@@ -1,6 +1,28 @@
 from .datafeed import DataFeed
 from .statistics import mean, population_std_dev
 
+class FeedDispatchMixin(object):
+  '''
+  forwards any method not defined directly on the class itself to the
+  single-instrument feed for that call's own first argument (the
+  instrument) - requires _feed_for(instrument), and that every
+  dispatched method takes instrument as its own first argument, true
+  of every DataFeed method (get_price, get_price_info, n_day_*,
+  trailing_dates). Shared by Universe and its test double (FakeUniverse
+  in tests/testutil.py), so a new DataFeed method automatically becomes
+  reachable through a multi-instrument Universe/FakeUniverse too,
+  without a matching hand-written one-liner here that's easy to forget.
+
+  date_is_trading_day is unaffected - Universe/FakeUniverse each
+  implement it directly with their own union-across-feeds semantics, so
+  normal attribute lookup finds that before __getattr__ ever runs.
+  '''
+
+  def __getattr__(self, name):
+    def dispatched(instrument, *args, **kwargs):
+      return getattr(self._feed_for(instrument), name)(instrument, *args, **kwargs)
+    return dispatched
+
 class SpreadStatsMixin(object):
   '''
   spread/n_day_spread_moving_avg/n_day_spread_std_dev, for any class
@@ -54,11 +76,13 @@ class SpreadStatsMixin(object):
     return values
 
 
-class Universe(SpreadStatsMixin):
+class Universe(FeedDispatchMixin, SpreadStatsMixin):
   '''
   multi-instrument market data: one DataFeed per instrument, dispatched
   by the `instrument` argument every DataFeed method already accepts
-  but a plain DataFeed itself ignores, since it only ever tracks one.
+  but a plain DataFeed itself ignores, since it only ever tracks one -
+  see FeedDispatchMixin for how get_price/get_price_info/n_day_*/
+  trailing_dates actually reach the right feed.
 
   Exposes the same method signatures as DataFeed, so it's a drop-in
   replacement anywhere a single-instrument "datafeed" is currently
@@ -81,36 +105,6 @@ class Universe(SpreadStatsMixin):
       return self.feeds[instrument]
     except KeyError:
       raise ValueError('instrument %r is not in this universe (%s)' % (instrument, sorted(self.feeds)))
-
-  def get_price(self, instrument, date, price):
-    return self._feed_for(instrument).get_price(instrument, date, price)
-
-  def get_price_info(self, instrument, date):
-    return self._feed_for(instrument).get_price_info(instrument, date)
-
-  def n_day_moving_avg(self, instrument, date, price, n):
-    return self._feed_for(instrument).n_day_moving_avg(instrument, date, price, n)
-
-  def n_day_high(self, instrument, date, price, n):
-    return self._feed_for(instrument).n_day_high(instrument, date, price, n)
-
-  def n_day_low(self, instrument, date, price, n):
-    return self._feed_for(instrument).n_day_low(instrument, date, price, n)
-
-  def n_day_std_dev(self, instrument, date, price, n):
-    return self._feed_for(instrument).n_day_std_dev(instrument, date, price, n)
-
-  def n_day_return(self, instrument, date, price, n):
-    return self._feed_for(instrument).n_day_return(instrument, date, price, n)
-
-  def n_day_rsi(self, instrument, date, price, n):
-    return self._feed_for(instrument).n_day_rsi(instrument, date, price, n)
-
-  def n_day_atr(self, instrument, date, n):
-    return self._feed_for(instrument).n_day_atr(instrument, date, n)
-
-  def trailing_dates(self, instrument, date, n, include_current):
-    return self._feed_for(instrument).trailing_dates(date, n, include_current)
 
   def date_is_trading_day(self, date):
     '''union semantics: true if ANY instrument in the universe trades this date'''

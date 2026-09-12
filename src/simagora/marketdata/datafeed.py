@@ -35,13 +35,16 @@ class DataFeed(object):
     start = j if include_current else (j - 1)
     return [idx for idx in (start - i for i in range(n)) if (idx >= 0)]
 
-  def trailing_dates(self, date, n, include_current):
+  def trailing_dates(self, instrument, date, n, include_current):
     '''
     dates for the same trailing trading-day slots as _trailing_indices,
     for a caller that needs the actual dates rather than this
     instrument's own price values - e.g. Universe walking one
     instrument's calendar to build a cross-instrument spread series
-    over the same window
+    over the same window. Takes (and ignores) `instrument` like every
+    other public method here, even though a single DataFeed only ever
+    tracks one - consistent so Universe can dispatch to any of these
+    methods generically rather than needing a special case for this one.
     '''
     return [self.feed[idx]['date'] for idx in self._trailing_indices(date, n, include_current)]
 

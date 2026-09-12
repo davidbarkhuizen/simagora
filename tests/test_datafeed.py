@@ -120,15 +120,15 @@ class TestDataFeed(unittest.TestCase):
     self.assertIsNone(self.datafeed.n_day_atr(self.instrument, date(2010, 1, 1), 3))
 
   def test_trailing_dates_includes_the_given_date(self):
-    dates = self.datafeed.trailing_dates(date(2010, 1, 3), 3, include_current=True)
+    dates = self.datafeed.trailing_dates(self.instrument, date(2010, 1, 3), 3, include_current=True)
     self.assertEqual(dates, [date(2010, 1, 3), date(2010, 1, 2), date(2010, 1, 1)])
 
   def test_trailing_dates_excludes_the_given_date_when_requested(self):
-    dates = self.datafeed.trailing_dates(date(2010, 1, 4), 3, include_current=False)
+    dates = self.datafeed.trailing_dates(self.instrument, date(2010, 1, 4), 3, include_current=False)
     self.assertEqual(dates, [date(2010, 1, 3), date(2010, 1, 2), date(2010, 1, 1)])
 
   def test_trailing_dates_caps_at_available_history(self):
-    dates = self.datafeed.trailing_dates(date(2010, 1, 1), 5, include_current=True)
+    dates = self.datafeed.trailing_dates(self.instrument, date(2010, 1, 1), 5, include_current=True)
     self.assertEqual(dates, [date(2010, 1, 1)])
 
 
