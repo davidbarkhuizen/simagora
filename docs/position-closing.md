@@ -9,7 +9,10 @@ A position closes the same day one of the following happens, in this order:
    hit first, so a day spanning both is resolved pessimistically, as a loss. Never
    triggers if `stop_loss` is `None` — that instead marks a fully-collateralized
    position (the full notional value is held as margin, e.g. a plain unleveraged
-   buy-and-hold purchase) with no price-based exit at all.
+   buy-and-hold purchase) with no price-based exit at all. Fills at the worse of
+   the `stop_loss` level and the day's actual low/high, not always the level
+   itself — a fast-market gap through the stop costs more than the margin
+   reserved at entry, rather than being capped by construction.
 2. **Take-profit** — intraday high/low reaches the order's `take_profit` level.
    Never triggers if `take_profit` is `None` (`TrendFollowingStrategy`'s positions).
 3. **Expiry** — `Order.expiry_date` is reached; settles at that day's closing price.

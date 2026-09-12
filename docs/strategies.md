@@ -37,10 +37,11 @@ Selected by the `strat` list passed to `Launcher()`/`Simulator()` (see
   `atr_window_days`, default 14) away from the entry price instead of a second,
   shorter Donchian channel — the standard "chandelier exit"-style alternative,
   scaled to how much the instrument is actually moving day to day. A genuine
-  chandelier exit also ratchets the stop as the position moves favorably; this
-  engine has no mechanism to update an already-open position's stop-loss in
-  place, so this variant places the ATR-sized stop once, at entry, and leaves
-  it there for the life of the position.
+  chandelier exit also ratchets the stop as the position moves favorably;
+  `Broker.tighten_stop_loss` now provides the in-place update mechanism that
+  would need (see [Layout](layout.md)'s `broker.py`), but this strategy
+  doesn't call it yet, so it still places the ATR-sized stop once, at entry,
+  and leaves it there for the life of the position.
 - **`'meanreversion'`** — `MeanReversionStrategy`. Bollinger-Band mean reversion:
   buy when the close drops 2 standard deviations below its own 20-day moving
   average (oversold), sell when it rises the same distance above it (overbought),

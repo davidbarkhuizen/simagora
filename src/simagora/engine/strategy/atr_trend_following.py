@@ -15,12 +15,11 @@ class ATRTrendFollowingStrategy(TrendFollowingBase):
 
   A genuine chandelier exit ratchets the stop up (for a long)/down
   (for a short) as the position moves favorably, re-tightening it
-  daily; this engine has no mechanism to update an already-open
-  position's stop-loss in place (Order.stop_loss is fixed at
-  submission), so this variant places the stop once, at entry,
-  atr_multiplier ATRs away, and leaves it there for the life of the
-  position - the ATR-sized initial stop half of the technique,
-  without the continuous ratcheting half.
+  daily; Broker.tighten_stop_loss provides that in-place update
+  mechanism, but this variant doesn't call it, so it still places the
+  stop once, at entry, atr_multiplier ATRs away, and leaves it there
+  for the life of the position - the ATR-sized initial stop half of
+  the technique, without the continuous ratcheting half.
   '''
 
   atr_window_days = 14         # Wilder's original ATR recommendation
