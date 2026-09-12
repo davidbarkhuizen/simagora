@@ -30,7 +30,7 @@ class Simulator(object):
   def __init__(self, instrument, strategies, start_date, end_date, opening_bal, time_stamp=None,
                universe=None, transaction_cost=Decimal(0), commission_per_trade=Decimal(0),
                max_open_positions_per_trader=None, max_open_positions_per_instrument=None,
-               max_margin_exposure_per_trader=None):
+               max_margin_exposure_per_trader=None, max_volume_fraction_per_fill=None):
     '''
     constructs message queues
     initialises brokers and traders
@@ -47,11 +47,11 @@ class Simulator(object):
     single-instrument-shaped charting either way.
 
     transaction_cost/commission_per_trade/max_open_positions_per_trader/
-    max_open_positions_per_instrument/max_margin_exposure_per_trader
-    are all forwarded to the Broker unchanged - see
-    Broker.calc_execution_price/Broker.__init__/
+    max_open_positions_per_instrument/max_margin_exposure_per_trader/
+    max_volume_fraction_per_fill are all forwarded to the Broker
+    unchanged - see Broker.calc_execution_price/Broker.__init__/
     Broker.execute_orders_to_open. Each defaults to the Broker's own
-    default (0 cost, 0 commission, no risk limits).
+    default (0 cost, 0 commission, no risk limits, no liquidity cap).
     '''
     self.instrument = instrument
     self.universe = universe
@@ -77,7 +77,8 @@ class Simulator(object):
                          commission_per_trade=commission_per_trade,
                          max_open_positions_per_trader=max_open_positions_per_trader,
                          max_open_positions_per_instrument=max_open_positions_per_instrument,
-                         max_margin_exposure_per_trader=max_margin_exposure_per_trader)
+                         max_margin_exposure_per_trader=max_margin_exposure_per_trader,
+                         max_volume_fraction_per_fill=max_volume_fraction_per_fill)
 
     self.traders = []
     for strategy in strategies:

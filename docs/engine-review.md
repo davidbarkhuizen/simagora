@@ -52,11 +52,16 @@ rewrite - none outstanding right now; `Simulator.report_performance()`
 
 ## 4. Genuine engine-level edge cases worth flagging
 
-- **Multi-trader interactions are fully independent.** Traders share one
-  `Broker`/`orderQ` but have separate `Account`s and no shared-liquidity or
-  market-impact modeling — reasonable for independent-strategy backtests,
-  but means the engine can't model traders competing for the same fills or
-  one trader's flow affecting another's execution price.
+- **No market-impact modeling.** `Broker.max_volume_fraction_per_fill` now
+  lets every trader's OPENING fills for an instrument compete for a shared,
+  finite same-day liquidity budget (a fraction of the day's traded volume),
+  rather than each trader's fill being entirely independent of every other
+  trader's - but the execution price itself is still always
+  `(high+low)/2` regardless of how much of that budget a day's fills have
+  already consumed. Real markets move price as volume is consumed
+  (slippage that grows with fill size); this engine's execution price
+  doesn't reflect that at all, for either a single large fill or several
+  traders' combined same-day flow.
 - **No netting**: each `Order` always creates a new independent `Position`,
   even for the same instrument+direction already held by the same trader —
   consistent throughout (`open_positions_by`, `close_in_the_money_positions`,

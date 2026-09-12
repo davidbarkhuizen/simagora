@@ -161,11 +161,12 @@ class TestPlotCreatesMissingPlotDirectory(unittest.TestCase):
 class TestSimulatorThreadsBrokerConfigToBroker(unittest.TestCase):
   '''
   transaction_cost/commission_per_trade/max_open_positions_per_trader/
-  max_open_positions_per_instrument/max_margin_exposure_per_trader are
-  all just forwarded from Simulator's own constructor straight to
-  Broker's - covered together here since they'd otherwise risk ending
-  up dead-ended the way Order.leverage once was (accepted somewhere,
-  but with no reachable way to actually set it)
+  max_open_positions_per_instrument/max_margin_exposure_per_trader/
+  max_volume_fraction_per_fill are all just forwarded from Simulator's
+  own constructor straight to Broker's - covered together here since
+  they'd otherwise risk ending up dead-ended the way Order.leverage
+  once was (accepted somewhere, but with no reachable way to actually
+  set it)
   '''
 
   def setUp(self):
@@ -204,6 +205,13 @@ class TestSimulatorThreadsBrokerConfigToBroker(unittest.TestCase):
     self.assertEqual(sim.broker.max_open_positions_per_instrument, 2)
     self.assertEqual(sim.broker.max_margin_exposure_per_trader, Decimal('5000'))
 
+  def test_explicit_max_volume_fraction_per_fill_reaches_the_broker(self):
+    sim = Simulator(
+      'testins', ['movavg'], date(2010, 1, 1), date(2010, 1, 1), Decimal('10000'),
+      max_volume_fraction_per_fill=Decimal('0.1'))
+
+    self.assertEqual(sim.broker.max_volume_fraction_per_fill, Decimal('0.1'))
+
   def test_defaults_to_zero_cost_and_no_risk_limits(self):
     sim = Simulator('testins', ['movavg'], date(2010, 1, 1), date(2010, 1, 1), Decimal('10000'))
 
@@ -212,6 +220,7 @@ class TestSimulatorThreadsBrokerConfigToBroker(unittest.TestCase):
     self.assertIsNone(sim.broker.max_open_positions_per_trader)
     self.assertIsNone(sim.broker.max_open_positions_per_instrument)
     self.assertIsNone(sim.broker.max_margin_exposure_per_trader)
+    self.assertIsNone(sim.broker.max_volume_fraction_per_fill)
 
 
 if __name__ == '__main__':
