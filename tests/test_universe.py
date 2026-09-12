@@ -68,6 +68,11 @@ class TestUniverse(unittest.TestCase):
     rsi = self.universe.n_day_rsi('AAA', date(2010, 1, 2), 'close', 1)
     self.assertEqual(rsi, Decimal('100'))
 
+  def test_n_day_atr_routes_correctly_too(self):
+    # AAA day2 True Range (prev close 102): max(108-100=8, |108-102|=6, |100-102|=2) = 8
+    atr = self.universe.n_day_atr('AAA', date(2010, 1, 2), 1)
+    self.assertEqual(atr, Decimal('8'))
+
   def test_unknown_instrument_raises_a_clear_error(self):
     with self.assertRaises(ValueError):
       self.universe.get_price('CCC', date(2010, 1, 1), 'close')

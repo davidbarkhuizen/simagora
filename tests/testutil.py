@@ -88,6 +88,28 @@ class FakeDataFeed(object):
 
     return Decimal(100) - (Decimal(100) / (Decimal(1) + (avg_gain / avg_loss)))
 
+  def n_day_atr(self, instrument, d, n):
+    dates = sorted(self.price_info_by_date.keys())
+    if (d not in dates):
+      return None
+    idx = dates.index(d)
+    start = idx - n
+    if (start < 0):
+      return None
+    window = dates[start:idx + 1]  # chronological (oldest first), n+1 bars
+
+    true_ranges = []
+    for i in range(1, len(window)):
+      bar = self.price_info_by_date[window[i]]
+      prev_close = self.price_info_by_date[window[i - 1]]['close']
+      true_ranges.append(max(
+        bar['high'] - bar['low'],
+        abs(bar['high'] - prev_close),
+        abs(bar['low'] - prev_close),
+      ))
+
+    return mean(true_ranges)
+
   def _trailing_values(self, d, field, n, include_current):
     dates = sorted(self.price_info_by_date.keys())
     if (d not in dates):
@@ -159,6 +181,9 @@ class FakeUniverse(SpreadStatsMixin):
 
   def n_day_rsi(self, instrument, d, field, n):
     return self._feed_for(instrument).n_day_rsi(instrument, d, field, n)
+
+  def n_day_atr(self, instrument, d, n):
+    return self._feed_for(instrument).n_day_atr(instrument, d, n)
 
   def trailing_dates(self, instrument, d, n, include_current):
     return self._feed_for(instrument).trailing_dates(d, n, include_current)

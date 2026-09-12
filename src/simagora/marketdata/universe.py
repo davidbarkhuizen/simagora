@@ -106,6 +106,9 @@ class Universe(SpreadStatsMixin):
   def n_day_rsi(self, instrument, date, price, n):
     return self._feed_for(instrument).n_day_rsi(instrument, date, price, n)
 
+  def n_day_atr(self, instrument, date, n):
+    return self._feed_for(instrument).n_day_atr(instrument, date, n)
+
   def trailing_dates(self, instrument, date, n, include_current):
     return self._feed_for(instrument).trailing_dates(date, n, include_current)
 

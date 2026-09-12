@@ -129,6 +129,36 @@ class DataFeed(object):
 
     return Decimal(100) - (Decimal(100) / (Decimal(1) + (avg_gain / avg_loss)))
 
+  def n_day_atr(self, instrument, date, n):
+    '''
+    Average True Range - a simple (not Wilder's exponentially-
+    smoothed) average of True Range over the n trading days ending at
+    date: True Range on a day is the largest of that day's own
+    high-low range, the gap up from the previous close to today's
+    high, and the gap down from the previous close to today's low.
+    Needs n+1 trailing bars (one more than the n True Range values
+    themselves, since each needs the previous day's close). Unlike
+    every other n_day_* method, takes no `price` field - True Range is
+    inherently built from high, low, *and* close together, not a
+    single field. None without n+1 days of history yet
+    '''
+    indices = self._trailing_indices(date, n + 1, include_current=True)
+    if (len(indices) < n + 1):
+      return None
+
+    chronological = list(reversed(indices))  # _trailing_indices is most-recent-first
+    true_ranges = []
+    for i in range(1, len(chronological)):
+      bar = self.feed[chronological[i]]
+      prev_close = self.feed[chronological[i - 1]]['close']
+      true_ranges.append(max(
+        bar['high'] - bar['low'],
+        abs(bar['high'] - prev_close),
+        abs(bar['low'] - prev_close),
+      ))
+
+    return mean(true_ranges)
+
   def get_price(self, instrument, date, price):
     info = self.get_price_info(instrument, date)
     return info[price] if (info is not None) else None
