@@ -165,7 +165,8 @@ class FakeUniverse(FeedDispatchMixin, SpreadStatsMixin):
 
 def make_broker(datafeed=None, transaction_cost=Decimal(0), commission_per_trade=Decimal(0),
                  max_open_positions_per_trader=None, max_open_positions_per_instrument=None,
-                 max_margin_exposure_per_trader=None, max_volume_fraction_per_fill=None):
+                 max_margin_exposure_per_trader=None, max_volume_fraction_per_fill=None,
+                 market_impact_factor=Decimal(0)):
   '''construct a Broker with fresh MsgQs; returns (orderQ, receiptQ, term_req_Q, term_notice_Q, broker)'''
   orderQ = MsgQ()
   receiptQ = MsgQ()
@@ -176,21 +177,24 @@ def make_broker(datafeed=None, transaction_cost=Decimal(0), commission_per_trade
                    max_open_positions_per_trader=max_open_positions_per_trader,
                    max_open_positions_per_instrument=max_open_positions_per_instrument,
                    max_margin_exposure_per_trader=max_margin_exposure_per_trader,
-                   max_volume_fraction_per_fill=max_volume_fraction_per_fill)
+                   max_volume_fraction_per_fill=max_volume_fraction_per_fill,
+                   market_impact_factor=market_impact_factor)
   return orderQ, receiptQ, term_req_Q, term_notice_Q, broker
 
 
 def make_broker_and_trader(datafeed, opening_bal, instrument, start_date, end_date, strategy_name=None,
                             transaction_cost=Decimal(0), commission_per_trade=Decimal(0),
                             max_open_positions_per_trader=None, max_open_positions_per_instrument=None,
-                            max_margin_exposure_per_trader=None, max_volume_fraction_per_fill=None):
+                            max_margin_exposure_per_trader=None, max_volume_fraction_per_fill=None,
+                            market_impact_factor=Decimal(0)):
   '''as make_broker(), plus a Trader registered with the broker; returns (..., broker, trader)'''
   orderQ, receiptQ, term_req_Q, term_notice_Q, broker = make_broker(
     datafeed, transaction_cost=transaction_cost, commission_per_trade=commission_per_trade,
     max_open_positions_per_trader=max_open_positions_per_trader,
     max_open_positions_per_instrument=max_open_positions_per_instrument,
     max_margin_exposure_per_trader=max_margin_exposure_per_trader,
-    max_volume_fraction_per_fill=max_volume_fraction_per_fill)
+    max_volume_fraction_per_fill=max_volume_fraction_per_fill,
+    market_impact_factor=market_impact_factor)
   trader = Trader(datafeed, broker, opening_bal, instrument, strategy_name, start_date, end_date)
   return orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader
 

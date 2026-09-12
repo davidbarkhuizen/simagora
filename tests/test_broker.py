@@ -547,6 +547,90 @@ class TestSharedLiquidityCap(unittest.TestCase):
     self.assertEqual(len(broker.open_positions), 1)
 
 
+class TestMarketImpact(unittest.TestCase):
+  '''
+  market_impact_factor shifts an opening fill's price further
+  unfavorably in proportion to how much of the instrument's day has
+  already been filled (already_filled / day_volume) - previously every
+  opening fill got an identical price regardless of how much of the
+  day's liquidity was already spoken for
+  '''
+
+  def test_the_first_fill_of_the_day_pays_no_impact(self):
+    datafeed = FakeDataFeed({
+      DAY1: {'high': Decimal('105'), 'low': Decimal('95'), 'close': Decimal('100'), 'volume': Decimal('100')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('100000'), 's&p500', DAY1, DAY1,
+                              market_impact_factor=Decimal('0.5'))
+
+    pos = open_position(trader, broker, DAY1, quantity=10)
+
+    # already_filled = 0 before this order -> no impact, midpoint(100) unchanged
+    self.assertEqual(pos.order_receipt.execution_price, Decimal('100'))
+
+  def test_a_later_buy_pays_a_worse_price_than_the_first(self):
+    datafeed = FakeDataFeed({
+      DAY1: {'high': Decimal('105'), 'low': Decimal('95'), 'close': Decimal('100'), 'volume': Decimal('100')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('100000'), 's&p500', DAY1, DAY1,
+                              market_impact_factor=Decimal('0.5'))
+
+    first = open_position(trader, broker, DAY1, quantity=10)
+    self.assertEqual(first.order_receipt.execution_price, Decimal('100'))
+
+    # already_filled = 10 after the first fill; fraction = 10/100 = 0.1
+    # impact = 0.5 * 0.1 * 100 = 5 -> buy fills worse (higher): 100+5 = 105
+    second = open_position(trader, broker, DAY1, quantity=10)
+    self.assertEqual(second.order_receipt.execution_price, Decimal('105'))
+
+  def test_a_later_sell_pays_a_worse_price_than_the_first(self):
+    datafeed = FakeDataFeed({
+      DAY1: {'high': Decimal('105'), 'low': Decimal('95'), 'close': Decimal('100'), 'volume': Decimal('100')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('100000'), 's&p500', DAY1, DAY1,
+                              market_impact_factor=Decimal('0.5'))
+
+    first = open_position(trader, broker, DAY1, buysell='sell', quantity=10,
+                           stop_loss=Decimal('110'), take_profit=Decimal('90'))
+    self.assertEqual(first.order_receipt.execution_price, Decimal('100'))
+
+    # same fraction as the buy case, but subtracted: a sell fills worse
+    # (lower) as liquidity is consumed: 100-5 = 95
+    second = open_position(trader, broker, DAY1, buysell='sell', quantity=10,
+                            stop_loss=Decimal('110'), take_profit=Decimal('90'))
+    self.assertEqual(second.order_receipt.execution_price, Decimal('95'))
+
+  def test_defaults_to_zero_leaving_every_fill_at_the_same_price(self):
+    datafeed = FakeDataFeed({
+      DAY1: {'high': Decimal('105'), 'low': Decimal('95'), 'close': Decimal('100'), 'volume': Decimal('100')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('100000'), 's&p500', DAY1, DAY1)
+
+    first = open_position(trader, broker, DAY1, quantity=50)
+    second = open_position(trader, broker, DAY1, quantity=50)
+
+    self.assertEqual(first.order_receipt.execution_price, Decimal('100'))
+    self.assertEqual(second.order_receipt.execution_price, Decimal('100'))
+
+  def test_no_impact_without_real_volume_data(self):
+    # volume(0) can't support an already_filled/day_volume fraction -
+    # confirms this is a no-op rather than a division error
+    datafeed = FakeDataFeed({
+      DAY1: {'high': Decimal('105'), 'low': Decimal('95'), 'close': Decimal('100'), 'volume': Decimal('0')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('100000'), 's&p500', DAY1, DAY1,
+                              market_impact_factor=Decimal('0.5'))
+
+    pos = open_position(trader, broker, DAY1, quantity=10)
+
+    self.assertEqual(pos.order_receipt.execution_price, Decimal('100'))
+
+
 class TestPositionExpired(unittest.TestCase):
 
   def setUp(self):

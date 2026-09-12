@@ -30,7 +30,8 @@ class Simulator(object):
   def __init__(self, instrument, strategies, start_date, end_date, opening_bal, time_stamp=None,
                universe=None, transaction_cost=Decimal(0), commission_per_trade=Decimal(0),
                max_open_positions_per_trader=None, max_open_positions_per_instrument=None,
-               max_margin_exposure_per_trader=None, max_volume_fraction_per_fill=None):
+               max_margin_exposure_per_trader=None, max_volume_fraction_per_fill=None,
+               market_impact_factor=Decimal(0)):
     '''
     constructs message queues
     initialises brokers and traders
@@ -48,10 +49,11 @@ class Simulator(object):
 
     transaction_cost/commission_per_trade/max_open_positions_per_trader/
     max_open_positions_per_instrument/max_margin_exposure_per_trader/
-    max_volume_fraction_per_fill are all forwarded to the Broker
-    unchanged - see Broker.calc_execution_price/Broker.__init__/
-    Broker.execute_orders_to_open. Each defaults to the Broker's own
-    default (0 cost, 0 commission, no risk limits, no liquidity cap).
+    max_volume_fraction_per_fill/market_impact_factor are all forwarded
+    to the Broker unchanged - see Broker.calc_execution_price/
+    Broker.__init__/Broker.execute_orders_to_open. Each defaults to the
+    Broker's own default (0 cost, 0 commission, no risk limits, no
+    liquidity cap, no market impact).
     '''
     self.instrument = instrument
     self.universe = universe
@@ -78,7 +80,8 @@ class Simulator(object):
                          max_open_positions_per_trader=max_open_positions_per_trader,
                          max_open_positions_per_instrument=max_open_positions_per_instrument,
                          max_margin_exposure_per_trader=max_margin_exposure_per_trader,
-                         max_volume_fraction_per_fill=max_volume_fraction_per_fill)
+                         max_volume_fraction_per_fill=max_volume_fraction_per_fill,
+                         market_impact_factor=market_impact_factor)
 
     self.traders = []
     for strategy in strategies:

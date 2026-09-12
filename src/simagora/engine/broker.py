@@ -12,7 +12,7 @@ class Broker(object):
   def __init__(self, datafeed, orderQ, receiptQ, term_req_Q, term_notice_Q, transaction_cost=Decimal(0),
                commission_per_trade=Decimal(0), max_open_positions_per_trader=None,
                max_open_positions_per_instrument=None, max_margin_exposure_per_trader=None,
-               max_volume_fraction_per_fill=None):
+               max_volume_fraction_per_fill=None, market_impact_factor=Decimal(0)):
     '''
     transaction_cost: a flat per-unit cost (in price terms) charged
     against every fill's execution price - see calc_execution_price.
@@ -44,6 +44,18 @@ class Broker(object):
     trader shares one Broker/orderQ but has no other point of
     interaction). Defaults to None (no limit), preserving the original
     unconstrained-opening behavior.
+
+    market_impact_factor: optional multiplier that shifts an OPENING
+    order's execution price further unfavorably, in proportion to how
+    much of order.ins's own day has already been filled (by any
+    trader's earlier opening fill - see _filled_quantity_by_ins_date)
+    relative to that day's traded volume - see
+    _market_impact_adjusted. Models same-day fills getting
+    progressively worse prices as a finite pool of liquidity is drawn
+    down, rather than every fill getting an identical price regardless
+    of how much of the day's liquidity is already spoken for. Defaults
+    to 0, the original flat-price assumption; has no effect without
+    real volume data (pdata['volume']) to compute a fraction against.
     '''
     self.datafeed = datafeed
 
@@ -59,6 +71,7 @@ class Broker(object):
     self.max_open_positions_per_instrument = max_open_positions_per_instrument
     self.max_margin_exposure_per_trader = max_margin_exposure_per_trader
     self.max_volume_fraction_per_fill = max_volume_fraction_per_fill
+    self.market_impact_factor = market_impact_factor
 
     self.traders = {}
 
@@ -204,6 +217,24 @@ class Broker(object):
     already_filled = self._filled_quantity_by_ins_date.get((order.ins, date), Decimal(0))
     return (already_filled + order.quantity) > budget
 
+  def _market_impact_adjusted(self, price, order, date):
+    '''
+    price, shifted further unfavorably by market_impact_factor in
+    proportion to already_filled / day_volume - see __init__. No
+    effect (returns price unchanged) if market_impact_factor is 0, or
+    if order.ins has no recorded volume for date (a zero or missing
+    volume can't support a "fraction of the day's liquidity already
+    used" calculation, so this is a no-op rather than a division error).
+    '''
+    if (self.market_impact_factor == 0):
+      return price
+    pdata = self.datafeed.get_price_info(order.ins, date)
+    if (pdata['volume'] <= 0):
+      return price
+    already_filled = self._filled_quantity_by_ins_date.get((order.ins, date), Decimal(0))
+    impact = self.market_impact_factor * (already_filled / pdata['volume']) * price
+    return (price + impact) if (order.buysell == 'buy') else (price - impact)
+
   def _calc_execution_price_or_reject(self, order, ins, buysell, date):
     '''
     calc_execution_price(ins, buysell, date), or None after queuing an
@@ -240,6 +271,10 @@ class Broker(object):
 
       if (exec_price is None):
         continue
+
+      # shift further unfavorably by how much of the day's liquidity
+      # is already spoken for - see _market_impact_adjusted
+      exec_price = self._market_impact_adjusted(exec_price, order, date)
 
       # calculate margin req - scales with the order's own quantity/leverage
       margin = None

@@ -51,16 +51,7 @@ rewrite - none outstanding right now; `Simulator.report_performance()`
 
 ## 4. Genuine engine-level edge cases worth flagging
 
-- **No market-impact modeling.** `Broker.max_volume_fraction_per_fill` now
-  lets every trader's OPENING fills for an instrument compete for a shared,
-  finite same-day liquidity budget (a fraction of the day's traded volume),
-  rather than each trader's fill being entirely independent of every other
-  trader's - but the execution price itself is still always
-  `(high+low)/2` regardless of how much of that budget a day's fills have
-  already consumed. Real markets move price as volume is consumed
-  (slippage that grows with fill size); this engine's execution price
-  doesn't reflect that at all, for either a single large fill or several
-  traders' combined same-day flow.
+None outstanding.
 
 ## Quick fixes
 
@@ -68,21 +59,26 @@ None outstanding.
 
 ## Biggest bang-for-buck
 
-`adj_open`/`adj_high`/`adj_low` (derived from each bar's own
-`close`-to-`adj_close` ratio) close out §1's `adj_close` item - a
-strategy switching to the adjusted price series now gets an internally
-consistent OHLC bar, the same way `adj_close` alone already worked.
+`Broker.market_impact_factor` (shifting an opening fill's price further
+unfavorably in proportion to `already_filled / day_volume`, reusing
+`_filled_quantity_by_ins_date` from the liquidity cap) closes out §4 -
+every edge case that section ever flagged is now addressed, and §1's
+`adj_close`/commission/position-sizing/stop-tightening items are all
+done from earlier rounds too.
 
-The next real, scoped gap: finish the other half of §4's "no
-market-impact modeling" note. `_filled_quantity_by_ins_date` (added for
-`max_volume_fraction_per_fill`) already tracks how much of an
-instrument's day has been filled before a given order - `calc_execution_price`
-just never reads it. An opt-in `Broker.market_impact_factor` (default
-0/None, preserving today's flat `(high+low)/2`) could shift the price
-further, unfavorably, in proportion to
-`already_filled / day_volume` - so the *second* trader (or the second
-half of one large order, once partial fills exist) filling the same
-instrument on the same day pays more than the first, rather than every
-fill getting an identical price regardless of how much of the day's
-liquidity is already spoken for. Reuses infrastructure the liquidity
-cap already built rather than needing new state.
+What's left is genuinely different in kind: §1's two remaining
+items - no margin calls/leverage limits/borrow cost/multi-currency
+(an explicit non-goal at this scale, not a recommended next step), and
+order types being a fixed shape (limit orders, partial fills) - are
+real structural undertakings, not another single-primitive PR. Both
+remaining order-type gaps share the same prerequisite: the engine has
+no concept of an order that stays pending across days. `orderQ` is
+drained and every order resolved (opened, rejected, or - for a
+CloseOrder - closed) the same call it's processed in; nothing survives
+from one `open_manage_and_close(date)` to the next. A limit order that
+hasn't touched its limit today, or a partial fill's unfilled remainder,
+both need somewhere to live until a later day's processing can act on
+them again. Building that - a persistent pending-orders collection
+`Broker` walks each day the way it already walks `open_positions` -
+is the actual next project here, and it's a design task worth scoping
+deliberately rather than slicing further.
