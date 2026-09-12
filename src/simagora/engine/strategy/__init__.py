@@ -19,7 +19,9 @@ from .moving_average_crossover_base import MovingAverageCrossoverBase
 from .moving_average_crossover import MovingAverageCrossoverStrategy
 from .dual_moving_average_crossover import DualMovingAverageCrossoverStrategy
 from .trend_following import TrendFollowingStrategy
+from .mean_reversion_base import MeanReversionBase
 from .mean_reversion import MeanReversionStrategy
+from .rsi_mean_reversion import RSIMeanReversionStrategy
 from .dual_momentum import DualMomentumStrategy
 from .cross_sectional_momentum import CrossSectionalMomentumStrategy
 from .periodic_investment_base import PeriodicInvestmentBase

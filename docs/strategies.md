@@ -33,7 +33,15 @@ Selected by the `strat` list passed to `Launcher()`/`Simulator()` (see
   buy when the close drops 2 standard deviations below its own 20-day moving
   average (oversold), sell when it rises the same distance above it (overbought),
   each with fixed 1%/2% stop-loss/take-profit bands. No position-management beyond
-  that — a reversion trade is meant to be quick.
+  that — a reversion trade is meant to be quick. Built on `MeanReversionBase`,
+  shared with `RSIMeanReversionStrategy` below.
+- **`'rsimeanreversion'`** — `RSIMeanReversionStrategy`, the other standard
+  mean-reversion indicator, taught alongside Bollinger Bands as its usual
+  textbook counterpart, sharing the same `MeanReversionBase` for stop-loss/
+  take-profit mechanics. Buy when the `rsi_window_days` (default 14, Wilder's
+  original recommendation) RSI (`DataFeed.n_day_rsi`) drops below
+  `oversold_threshold` (default 30), sell when it rises above
+  `overbought_threshold` (default 70).
 - **`'dualmomentum'`** — `DualMomentumStrategy`, the first multi-instrument
   strategy (`MultiInstrumentStrategy`, trades across `trader.universe`). An
   Antonacci-style rotation: ranks `trader.universe` by trailing 20-day return
@@ -121,9 +129,9 @@ default, so a typo doesn't quietly run the wrong strategy; `None` (what every
 strategy loads) resolves to `'movavg'`.
 
 `MovingAverageCrossoverStrategy`, `DualMovingAverageCrossoverStrategy`,
-`TrendFollowingStrategy`, `MeanReversionStrategy`, `DollarCostAveragingStrategy`,
-and `ValueAveragingStrategy` are single-instrument (`SingleInstrumentStrategy`
-reads `trader.instrument`);
+`TrendFollowingStrategy`, `MeanReversionStrategy`, `RSIMeanReversionStrategy`,
+`DollarCostAveragingStrategy`, and `ValueAveragingStrategy` are single-instrument
+(`SingleInstrumentStrategy` reads `trader.instrument`);
 `DualMomentumStrategy`, `CrossSectionalMomentumStrategy`, `LowVolatilityStrategy`,
 and `PairsTradingStrategy` are multi-instrument — see
 [Multi-instrument support](multi-instrument.md) for the plumbing they're built on.
