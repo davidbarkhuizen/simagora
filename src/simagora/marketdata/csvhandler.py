@@ -25,6 +25,13 @@ def parse_string_to_date(date_str):
   except Exception as e:
     return None
     
+def _decimal_or_default(row, index, default=0):
+  '''Decimal(row[index]), or default if that index is missing or unparseable'''
+  try:
+    return Decimal(row[index])
+  except Exception:
+    return default
+
 def row_to_dict(row):
   '''return dict with keys [date, open, high, low, close, volume, adj_close]'''
   date = parse_string_to_date(row[0])
@@ -36,15 +43,8 @@ def row_to_dict(row):
   low = Decimal(row[3])
   close = Decimal(row[4])
 
-  try:
-    volume = Decimal(row[5])
-  except:
-    volume = 0
-
-  try:
-    adj_close = Decimal(row[6])
-  except:
-    adj_close = 0
+  volume = _decimal_or_default(row, 5)
+  adj_close = _decimal_or_default(row, 6)
 
   return {'date' : date, 'open' : open, 'high' : high, 'low' : low, 'close' : close, 'adj_close' : adj_close, 'volume' : volume }
 

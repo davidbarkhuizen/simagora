@@ -371,35 +371,48 @@ class Broker(object):
     # 3. close positions based on outstanding close orders
     self.execute_orders_to_close(date)
 
+  def _cost_adjusted(self, price, fill_buysell):
+    '''
+    price adjusted unfavorably by self.transaction_cost for a fill in
+    the given direction - added for a buy (paying more), subtracted
+    for a sell (receiving less). transaction_cost defaults to 0, the
+    original cost-free execution assumption. Shared formula behind
+    calc_execution_price (fill_buysell is the order's own direction)
+    and apply_exit_cost (fill_buysell is the opposite of the position's
+    original direction, since exiting a buy fills as a sell and vice
+    versa).
+    '''
+    return (price + self.transaction_cost) if (fill_buysell == 'buy') else (price - self.transaction_cost)
+
   def calc_execution_price(self, ins, buysell, date):
     '''
     price = (pdata['high'] + pdata['low']) / Decimal(2), then adjusted
-    unfavorably by self.transaction_cost - added for a buy (paying
-    more), subtracted for a sell (receiving less) - modeling a flat
-    per-unit bid/ask spread or slippage cost against the trade
-    direction. transaction_cost defaults to 0, the original cost-free
-    execution assumption. None if ins has no data for date.
+    unfavorably by self.transaction_cost - see _cost_adjusted. None if
+    ins has no data for date.
     '''
     pdata = self.datafeed.get_price_info(ins, date)
     if (pdata is None):
       return None
     # average of day high and low
     price = (pdata['high'] + pdata['low']) / Decimal(2)
-    return (price + self.transaction_cost) if (buysell == 'buy') else (price - self.transaction_cost)
+    return self._cost_adjusted(price, buysell)
 
   def apply_exit_cost(self, price, position_buysell):
     '''
     price adjusted unfavorably by self.transaction_cost for a position
     exit, given the position's own original order.buysell direction -
     closing a 'buy' fills as a sell (cost subtracted, receiving less);
-    closing a 'sell' fills as a buy (cost added, paying more). Same
+    closing a 'sell' fills as a buy (cost added, paying more) - see
+    _cost_adjusted, called here with the opposite of position_buysell
+    since it takes the fill's own direction, not the position's. Same
     cost convention as calc_execution_price, but for an already-known
     exit price level (a stop_loss/take_profit trigger, or a day's raw
     close) rather than one freshly computed from pdata - used by
     Account.stop_loss/take_profit/handle_expiry so every exit path pays
     the same transaction_cost as an open or an explicit close already do.
     '''
-    return (price - self.transaction_cost) if (position_buysell == 'buy') else (price + self.transaction_cost)
+    fill_buysell = 'sell' if (position_buysell == 'buy') else 'buy'
+    return self._cost_adjusted(price, fill_buysell)
 
   def log_all_positions(self, d):
     '''
