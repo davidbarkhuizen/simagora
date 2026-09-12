@@ -49,19 +49,22 @@ to be run from the repo root.
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
   being silently discarded.
-- `strategy/` — a package: ten strategies, one per file, all sharing
+- `strategy/` — a package: eleven strategies, one per file, all sharing
   `strategy_base.py`'s `BaseStrategy` for trader/datafeed wiring, order
   submission, and `log_self()` (which now logs the concrete strategy's own
   file, via `inspect.getfile()`, rather than one shared module); split into
   `SingleInstrumentStrategy`/`MultiInstrumentStrategy` for what instrument(s)
-  they trade (see [Multi-instrument support](multi-instrument.md)).
-  `MovingAverageCrossoverStrategy`/`DualMovingAverageCrossoverStrategy` further
-  share `moving_average_crossover_base.py`'s `MovingAverageCrossoverBase` for
-  their common buy/sell/close-in-the-money mechanics, differing only in what
-  "fast"/"slow" values they cross; `DollarCostAveragingStrategy`/
-  `ValueAveragingStrategy` likewise share `periodic_investment_base.py`'s
-  `PeriodicInvestmentBase` for their common every-`interval_days` scheduling,
-  differing only in how much to buy each period. Selected
+  they trade (see [Multi-instrument support](multi-instrument.md)). Three
+  further pairs each share their own base for mechanics that differ only in
+  what feeds the signal: `MovingAverageCrossoverStrategy`/
+  `DualMovingAverageCrossoverStrategy` share `moving_average_crossover_base.py`'s
+  `MovingAverageCrossoverBase` (differing in what "fast"/"slow" values they
+  cross); `MeanReversionStrategy`/`RSIMeanReversionStrategy` share
+  `mean_reversion_base.py`'s `MeanReversionBase` (Bollinger Bands vs RSI
+  deciding oversold/overbought); `DollarCostAveragingStrategy`/
+  `ValueAveragingStrategy` share `periodic_investment_base.py`'s
+  `PeriodicInvestmentBase` (a fixed quantity vs a target-value gap deciding how
+  much to buy each period). Selected
   by name (see [Strategies](strategies.md)) via `registry.py`'s
   `STRATEGY_REGISTRY`/`resolve_strategy_class()`, which `Trader.load_strategy()`
   calls with the `strategy_name` it was constructed with. `registry.py` is a
