@@ -4,7 +4,10 @@ from decimal import Decimal
 from simagora.engine.trader import Trader
 from simagora.domain.order import Order
 
-from testutil import FakeDataFeed, DAY1, DAY2, DAY1_PRICES, make_broker, make_broker_and_trader, open_position
+from testutil import (
+  FakeDataFeed, DAY1, DAY2, DAY1_PRICES, make_broker, make_broker_and_trader, open_position,
+  submitted_orders,
+)
 
 
 class TestTraderProcessReceipts(unittest.TestCase):
@@ -90,7 +93,7 @@ class TestTraderExecuteStrategyGuard(unittest.TestCase):
 
     trader.execute_strategy(DAY2)  # must not raise
 
-    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
 
 
 if __name__ == '__main__':
