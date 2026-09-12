@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-from ...domain.order import Order
 from .strategy_base import MultiInstrumentStrategy
 
 class LowVolatilityStrategy(MultiInstrumentStrategy):
@@ -40,5 +39,4 @@ class LowVolatilityStrategy(MultiInstrumentStrategy):
       if (ins in open_by_ins):
         continue
       cur_price = self.datafeed.get_price(ins, date, 'close')
-      order = Order(ins, 'buy', 1, self.stop_loss_level(cur_price, 'buy', self.stop_loss_margin), None, date)
-      self.submit_order(order)
+      self.submit_stop_only_order(ins, 'buy', 1, cur_price, self.stop_loss_margin, date)

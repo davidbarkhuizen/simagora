@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-from ...domain.order import Order
 from .strategy_base import MultiInstrumentStrategy
 
 class PairsTradingStrategy(MultiInstrumentStrategy):
@@ -71,11 +70,8 @@ class PairsTradingStrategy(MultiInstrumentStrategy):
     long_price = self.datafeed.get_price(long_ins, date, 'close')
     short_price = self.datafeed.get_price(short_ins, date, 'close')
 
-    long_stop = self.stop_loss_level(long_price, 'buy', self.stop_loss_margin)
-    short_stop = self.stop_loss_level(short_price, 'sell', self.stop_loss_margin)
-
-    self.submit_order(Order(long_ins, 'buy', 1, long_stop, None, date))
-    self.submit_order(Order(short_ins, 'sell', 1, short_stop, None, date))
+    self.submit_stop_only_order(long_ins, 'buy', 1, long_price, self.stop_loss_margin, date)
+    self.submit_stop_only_order(short_ins, 'sell', 1, short_price, self.stop_loss_margin, date)
 
   def execute(self, date):
     open_positions = self._pair_positions()
