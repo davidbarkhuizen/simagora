@@ -49,6 +49,21 @@ class DataFeed(object):
     '''up to n values of `price` for the trailing window described by _trailing_indices'''
     return [self.feed[idx][price] for idx in self._trailing_indices(date, n, include_current)]
 
+  def _chronological_window(self, date, n):
+    '''
+    up to n trailing self.feed indices ending at date, oldest-first
+    (chronological) - or None if fewer than n exist. Shared by
+    n_day_rsi/n_day_atr, which both need actual consecutive-day
+    comparisons (a day-over-day change; a bar's true range against the
+    previous day's close), not just an aggregate over the window, so
+    they need the index sequence itself rather than _trailing_values'
+    already-aggregated-away values
+    '''
+    indices = self._trailing_indices(date, n, include_current=True)
+    if (len(indices) < n):
+      return None
+    return list(reversed(indices))  # _trailing_indices is most-recent-first
+
   def _value_n_days_before(self, date, price, n):
     '''value of `price` n trading days before date (n=0 is date's own value); None if unavailable'''
     j = self._index_of(date)
@@ -110,15 +125,14 @@ class DataFeed(object):
     without n+1 days of history yet; 100 if there were no losses at
     all in the window (avg_loss == 0), rather than dividing by zero
     '''
-    values = self._trailing_values(date, price, n + 1, include_current=True)
-    if (len(values) < n + 1):
+    chronological = self._chronological_window(date, n + 1)
+    if (chronological is None):
       return None
 
-    chronological = list(reversed(values))  # _trailing_values is most-recent-first
     gains = []
     losses = []
     for i in range(1, len(chronological)):
-      change = chronological[i] - chronological[i - 1]
+      change = self.feed[chronological[i]][price] - self.feed[chronological[i - 1]][price]
       gains.append(change if (change > 0) else Decimal(0))
       losses.append(-change if (change < 0) else Decimal(0))
 
@@ -142,11 +156,10 @@ class DataFeed(object):
     inherently built from high, low, *and* close together, not a
     single field. None without n+1 days of history yet
     '''
-    indices = self._trailing_indices(date, n + 1, include_current=True)
-    if (len(indices) < n + 1):
+    chronological = self._chronological_window(date, n + 1)
+    if (chronological is None):
       return None
 
-    chronological = list(reversed(indices))  # _trailing_indices is most-recent-first
     true_ranges = []
     for i in range(1, len(chronological)):
       bar = self.feed[chronological[i]]
