@@ -146,10 +146,10 @@ class Account(HasAutoId):
       
       # record loss
       self.net_booked_position = self.net_booked_position - loss
-      pos.history[date] = loss
-      
-      delta = Decimal(0) - loss      
-      reason = 'expired out of the money'    
+      pos.history[date] = -loss
+
+      delta = Decimal(0) - loss
+      reason = 'expired out of the money'
      
     # term_date, term_price, position_id, reason, profitloss) 
       
