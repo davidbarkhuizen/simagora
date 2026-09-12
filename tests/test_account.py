@@ -102,5 +102,43 @@ class TestTallyOpenPositionsCalendarGap(unittest.TestCase):
     self.assertEqual(self.trader.ac.net_open_position[DAY2], Decimal('0'))
 
 
+class TestHandleExpirySign(unittest.TestCase):
+  '''
+  handle_expiry's "expired out of the money" branch previously
+  recorded pos.history[date] as a positive loss magnitude - unlike
+  every other place a loss is recorded (Account.stop_loss's -margin,
+  tally_individual_open_positions's -loss), and unlike the "expired in
+  the money" branch right above it in the same method, which does use
+  a correctly-signed value. Currently harmless in practice - an
+  expiring position is removed from open_positions before anything
+  reads pos.history[date] again - but a landmine if that ordering ever
+  changes, so covered directly here rather than relying on it
+  '''
+
+  def setUp(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, self.broker, self.trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+
+  def test_out_of_the_money_expiry_records_a_negative_history_value(self):
+    pos = make_manual_position(self.broker, self.trader, 's&p500', 'buy', execution_price=Decimal('100'))
+    pdata = {'close': Decimal('90')}  # below the buy's execution price - a loss
+
+    self.trader.ac.handle_expiry(DAY2, pos, pdata, 'buy')
+
+    self.assertEqual(pos.term_notice.reason, 'expired out of the money')
+    # pdelta = 10, quantity = 1, leverage = 1
+    self.assertEqual(pos.history[DAY2], Decimal('-10'))
+
+  def test_in_the_money_expiry_records_a_positive_history_value(self):
+    pos = make_manual_position(self.broker, self.trader, 's&p500', 'buy', execution_price=Decimal('100'))
+    pdata = {'close': Decimal('110')}  # above the buy's execution price - a profit
+
+    self.trader.ac.handle_expiry(DAY2, pos, pdata, 'buy')
+
+    self.assertEqual(pos.term_notice.reason, 'expired in the money')
+    self.assertEqual(pos.history[DAY2], Decimal('10'))
+
+
 if __name__ == '__main__':
   unittest.main()
