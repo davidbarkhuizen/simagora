@@ -13,4 +13,3 @@ Documentation is split into the following sections:
 - [Testing](docs/testing.md) — running the test suite.
 - [Data](docs/data.md) — where market data is read from.
 - [Running](docs/running.md) — how to construct and run a simulation.
-- [Engine review](docs/engine-review.md) — architectural review of the core engine: gaps and extensions.
