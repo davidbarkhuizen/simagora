@@ -81,13 +81,18 @@ class Account(HasAutoId):
   def stop_loss(self, date, pos, pdata, buysell):
     '''
     closes via _close_position, same as take_profit/close_at_price -
-    at zero transaction_cost this reduces to exactly the old forfeit-
-    the-whole-margin behavior (margin was defined at order-open time
-    as the exec-price-to-stop_loss pdelta, so recomputing that same
-    pdelta here nets out identically); a nonzero cost now additionally
-    deepens the loss past the capped margin, same as every other exit
+    fills at the worse of the trigger level and the day's actual
+    low/high, modeling slippage from a fast-market gap through the
+    stop (a long fills at min(stop_loss, pdata['low']), a short at
+    max(stop_loss, pdata['high'])) - at a day that didn't gap past the
+    trigger, and zero transaction_cost, this reduces to exactly the old
+    forfeit-the-whole-margin behavior (margin was defined at
+    order-open time as the exec-price-to-stop_loss pdelta, so
+    recomputing that same pdelta here nets out identically)
     '''
-    exit_price = self.broker.apply_exit_cost(pos.order_receipt.order.stop_loss, buysell)
+    order = pos.order_receipt.order
+    trigger_price = min(order.stop_loss, pdata['low']) if (buysell == 'buy') else max(order.stop_loss, pdata['high'])
+    exit_price = self.broker.apply_exit_cost(trigger_price, buysell)
     self._close_position(date, pos, exit_price, buysell, 'stop_loss')
 
   def close_at_price(self, date, pos, price, buysell):

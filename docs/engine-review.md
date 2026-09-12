@@ -17,11 +17,6 @@ simplification.
   separate commission/fee model distinct from this spread-style cost
   (e.g. a fixed per-trade fee, or one that scales with notional rather
   than quantity).
-- **No slippage on stop-loss execution.** `Account.stop_loss` always books
-  the loss as exactly the margin reserved at entry, regardless of how far
-  the day's low actually gapped past the stop level. Real stop orders can
-  execute worse than their trigger in a fast market; here the loss is
-  capped by construction.
 - **`Order.target_price`/`target_floor`/`target_ceiling`** are accepted in
   `Order.__init__` and stored, but never read anywhere in the codebase —
   vestigial/unused fields.
@@ -109,16 +104,18 @@ their own planned piece of work:
 
 ## Biggest bang-for-buck
 
-Model slippage on stop-loss execution (§1) — `Broker.manage_open_positions`
-already fetches `pdata` (the day's high/low/close) before calling
-`Account.stop_loss(date, pos, pdata, buysell)`, but `stop_loss` has never
-read that parameter: it fills at the literal `order.stop_loss` trigger
-level (now cost-adjusted, see above) regardless of how far the day's
-low/high actually gapped past it. Since `pdata` is already sitting in
-`stop_loss`'s own argument list, the fix is scoped to that one method:
-exit at `min(order.stop_loss, pdata['low'])` for a long (or
-`max(order.stop_loss, pdata['high'])` for a short) before applying
-`apply_exit_cost`, so a fast-market gap-through actually costs more than
-the margin reserved at entry, instead of being capped by construction.
-No new data, no new order type, no design bikeshedding - just using a
-value the method already receives.
+Net long/short exposure per instrument in the portfolio risk limits (§1) —
+`Broker._exceeds_max_margin_exposure_per_trader` currently checks
+`trader.ac.margin_bal + margin` against the cap, a flat sum across every
+open position regardless of direction, so a long and an offsetting short
+on the same instrument both count fully against it instead of netting
+out. The fix is scoped to that one check (and its sibling computation at
+order-open time): group the trader's open positions' margin by
+instrument, sum each instrument's margin *signed* by `buysell` (long
+positive, short negative), then sum the *magnitudes* of those per-
+instrument totals for the trader-level figure compared against the cap.
+`get_open_positions_for_trader` (already used by the two sibling
+open-position-count checks) is the only new data needed - no new order
+type, no strategy-level change, and every existing single-direction test
+case reduces to today's flat sum (its per-instrument signed total already
+equals its absolute value).

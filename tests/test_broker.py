@@ -228,7 +228,11 @@ class TestTransactionCost(unittest.TestCase):
   def test_stop_loss_charges_cost_on_the_exit(self):
     datafeed = FakeDataFeed({
       DAY1: DAY1_PRICES,
-      DAY2: {'high': Decimal('92'), 'low': Decimal('85'), 'close': Decimal('88')},
+      # low(90) touches the trigger exactly, without gapping past it -
+      # isolates the cost effect from stop_loss's separate slippage
+      # modeling (see TestStopLossSlippage), which would otherwise
+      # also move the exit price here
+      DAY2: {'high': Decimal('92'), 'low': Decimal('90'), 'close': Decimal('91')},
     })
     (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
       make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2, transaction_cost=Decimal('1'))
@@ -237,7 +241,7 @@ class TestTransactionCost(unittest.TestCase):
     self.assertEqual(trader.ac.margin_bal, Decimal('11'))
     self.assertEqual(trader.ac.cash_bal, Decimal('9989'))
 
-    broker.manage_open_positions(DAY2)  # stop_loss triggers: low(85) <= 90
+    broker.manage_open_positions(DAY2)  # stop_loss triggers: low(90) <= 90
 
     # exit fills as a sell: stop_loss(90) - cost(1) = 89
     # pdelta = 89-101 = -12 (vs. -11 == -margin with no cost) - cost
@@ -417,6 +421,78 @@ class TestClosePrecedence(unittest.TestCase):
     self.assertEqual(len(self.broker.open_positions), 0)
     self.assertIn(pos, self.broker.closed_positions)
     self.assertEqual(pos.term_notice.reason, 'stop_loss')
+
+
+class TestStopLossSlippage(unittest.TestCase):
+  '''
+  a stop_loss fill uses the worse of the trigger level and the day's
+  actual low/high - modeling a fast-market gap through the stop,
+  rather than always capping the loss at the margin reserved at entry
+  '''
+
+  def test_buy_stop_loss_fills_at_the_days_low_when_it_gaps_past_the_trigger(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('92'), 'low': Decimal('80'), 'close': Decimal('85')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+    pos = open_position(trader, broker, DAY1)
+    # exec price = 100, margin = 100-90 = 10
+    self.assertEqual(trader.ac.margin_bal, Decimal('10'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9990'))
+
+    broker.manage_open_positions(DAY2)  # stop_loss(90) gapped past by low(80)
+
+    # fills at low(80), not the trigger(90): pdelta = 80-100 = -20
+    # (vs. -10 == -margin at exactly the trigger)
+    self.assertEqual(pos.term_notice.term_price, Decimal('80'))
+    self.assertEqual(trader.ac.margin_bal, Decimal('0'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9980'))
+    self.assertEqual(trader.ac.net_booked_position, Decimal('-20'))
+
+  def test_sell_stop_loss_fills_at_the_days_high_when_it_gaps_past_the_trigger(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('120'), 'low': Decimal('100'), 'close': Decimal('110')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+    pos = open_position(trader, broker, DAY1, buysell='sell', stop_loss=Decimal('110'), take_profit=Decimal('90'))
+    # exec price = 100, margin = 110-100 = 10
+    self.assertEqual(trader.ac.margin_bal, Decimal('10'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9990'))
+
+    broker.manage_open_positions(DAY2)  # stop_loss(110) gapped past by high(120)
+
+    # fills at high(120), not the trigger(110): pdelta = 100-120 = -20
+    # (vs. -10 == -margin at exactly the trigger)
+    self.assertEqual(pos.term_notice.term_price, Decimal('120'))
+    self.assertEqual(trader.ac.margin_bal, Decimal('0'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9980'))
+    self.assertEqual(trader.ac.net_booked_position, Decimal('-20'))
+
+  def test_fills_at_the_trigger_level_when_the_day_does_not_gap_past_it(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      # low touches the trigger exactly - no gap
+      DAY2: {'high': Decimal('95'), 'low': Decimal('90'), 'close': Decimal('92')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+    pos = open_position(trader, broker, DAY1)
+    # exec price = 100, margin = 100-90 = 10
+    self.assertEqual(trader.ac.margin_bal, Decimal('10'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9990'))
+
+    broker.manage_open_positions(DAY2)  # stop_loss(90) == low(90), no gap
+
+    # fills at exactly the trigger(90): pdelta = -10 == -margin, same as
+    # the original (pre-slippage) forfeit-the-margin behavior
+    self.assertEqual(pos.term_notice.term_price, Decimal('90'))
+    self.assertEqual(trader.ac.margin_bal, Decimal('0'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9990'))
+    self.assertEqual(trader.ac.net_booked_position, Decimal('-10'))
 
 
 class TestNoStopLossPositions(unittest.TestCase):
