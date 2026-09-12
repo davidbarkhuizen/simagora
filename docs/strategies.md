@@ -75,7 +75,20 @@ Selected by the `strat` list passed to `Launcher()`/`Simulator()` (see
   simply accumulate and are marked to market for the rest of the run. Sized by a
   fixed share quantity rather than a fixed dollar amount, like every strategy
   above — an order submitted today executes at tomorrow's price (see
-  [Overview](overview.md)), which isn't known yet at submission time.
+  [Overview](overview.md)), which isn't known yet at submission time. Built on
+  `PeriodicInvestmentBase`, shared with `ValueAveragingStrategy` below.
+- **`'valueaveraging'`** — `ValueAveragingStrategy`, the standard textbook
+  counterpart to `DollarCostAveragingStrategy` (Edleson's Value Averaging),
+  sharing the same `PeriodicInvestmentBase` schedule. Instead of a fixed
+  quantity every period, buys however many shares are needed to bring the
+  position's current market value up to a linearly growing target -
+  `deposit_amount` × (periods elapsed + 1) - so it buys more when the price has
+  dropped (the existing holding is worth less, so a bigger top-up is needed) and
+  less when it's risen. Buy-only: if the position's value already meets or
+  exceeds the target, that period's purchase is skipped rather than selling the
+  excess - the commonly-discussed "no-sell" variant, since this engine's
+  Order/Position model represents each purchase as its own discrete lot rather
+  than a fungible pool of shares a partial close could trim precisely.
 - **`'pairstrading'`** — `PairsTradingStrategy`, also a `MultiInstrumentStrategy`,
   but trades a fixed pair rather than ranking the whole universe: the first two
   instruments of `trader.universe` (`self.instrument_a`/`self.instrument_b`).
@@ -108,8 +121,9 @@ default, so a typo doesn't quietly run the wrong strategy; `None` (what every
 strategy loads) resolves to `'movavg'`.
 
 `MovingAverageCrossoverStrategy`, `DualMovingAverageCrossoverStrategy`,
-`TrendFollowingStrategy`, `MeanReversionStrategy`, and `DollarCostAveragingStrategy`
-are single-instrument (`SingleInstrumentStrategy` reads `trader.instrument`);
+`TrendFollowingStrategy`, `MeanReversionStrategy`, `DollarCostAveragingStrategy`,
+and `ValueAveragingStrategy` are single-instrument (`SingleInstrumentStrategy`
+reads `trader.instrument`);
 `DualMomentumStrategy`, `CrossSectionalMomentumStrategy`, `LowVolatilityStrategy`,
 and `PairsTradingStrategy` are multi-instrument — see
 [Multi-instrument support](multi-instrument.md) for the plumbing they're built on.

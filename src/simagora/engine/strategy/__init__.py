@@ -22,7 +22,9 @@ from .trend_following import TrendFollowingStrategy
 from .mean_reversion import MeanReversionStrategy
 from .dual_momentum import DualMomentumStrategy
 from .cross_sectional_momentum import CrossSectionalMomentumStrategy
+from .periodic_investment_base import PeriodicInvestmentBase
 from .dollar_cost_averaging import DollarCostAveragingStrategy
+from .value_averaging import ValueAveragingStrategy
 from .low_volatility import LowVolatilityStrategy
 from .pairs_trading import PairsTradingStrategy
 from .registry import STRATEGY_REGISTRY, DEFAULT_STRATEGY_NAME, resolve_strategy_class

@@ -1,7 +1,7 @@
 from ...domain.order import Order
-from .strategy_base import SingleInstrumentStrategy
+from .periodic_investment_base import PeriodicInvestmentBase
 
-class DollarCostAveragingStrategy(SingleInstrumentStrategy):
+class DollarCostAveragingStrategy(PeriodicInvestmentBase):
   '''
   buys a fixed quantity of self.instrument every interval_days trading
   days - starting on the very first one - and otherwise does nothing:
@@ -18,15 +18,7 @@ class DollarCostAveragingStrategy(SingleInstrumentStrategy):
   for the rest of the run.
   '''
 
-  interval_days = 21  # ~1 trading month
   quantity = 1
 
-  def __init__(self, trader, start_date, end_date):
-    SingleInstrumentStrategy.__init__(self, trader, start_date, end_date)
-    self.trading_days_seen = 0
-
-  def execute(self, date):
-    if (self.trading_days_seen % self.interval_days == 0):
-      order = Order(self.instrument, 'buy', self.quantity, None, None, date)
-      self.submit_order(order)
-    self.trading_days_seen += 1
+  def _investment_order(self, date):
+    return Order(self.instrument, 'buy', self.quantity, None, None, date)
