@@ -25,7 +25,8 @@ to be run from the repo root.
 ## `domain/`
 
 - `order.py` — an order to open a new position (buy/sell, quantity, stop-loss,
-  take-profit, optional expiry date).
+  take-profit, optional expiry date, optional leverage - defaults to `1`,
+  coerced to `Decimal` the same way `quantity` is).
 - `closeorder.py` — an order to close a specific already-open position by id,
   independent of stop-loss/take-profit/expiry.
 - `orderreceipt.py`, `position.py`, `termnotice.py` — simple data/record classes

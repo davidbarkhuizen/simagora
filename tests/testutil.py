@@ -249,14 +249,15 @@ def make_multi_instrument_trader(prices_by_ins, strategy_class, instrument=None,
 
 def open_position(trader, broker, day, buysell='buy', quantity=1,
                    stop_loss=Decimal('90'), take_profit=Decimal('110'),
-                   ins='s&p500', expiry_date=None):
+                   ins='s&p500', expiry_date=None, leverage=Decimal(1)):
   '''
   submit an Order and let the broker open it; returns the resulting
   Position. Only for the successful-open path - a rejected order
   leaves no new position, so tests exercising rejection submit/open
   the order directly instead of using this helper.
   '''
-  order = Order(ins, buysell, quantity, stop_loss, take_profit, day, expiry_date=expiry_date)
+  order = Order(ins, buysell, quantity, stop_loss, take_profit, day,
+                expiry_date=expiry_date, leverage=leverage)
   trader.submit_order(order)
   broker.execute_orders_to_open(day)
   return broker.open_positions[-1]

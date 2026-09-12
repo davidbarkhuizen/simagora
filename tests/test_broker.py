@@ -56,6 +56,18 @@ class TestExecuteOrdersToOpen(unittest.TestCase):
     self.assertEqual(trader.ac.cash_bal, Decimal('9950'))
     self.assertEqual(trader.ac.margin_bal, Decimal('50'))
 
+  def test_margin_scales_with_leverage(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+
+    open_position(trader, broker, DAY1, leverage=Decimal('3'))
+
+    self.assertEqual(len(broker.open_positions), 1)
+    # exec price = 100, per-unit margin = 10, leverage = 3 -> margin = 30
+    self.assertEqual(trader.ac.cash_bal, Decimal('9970'))
+    self.assertEqual(trader.ac.margin_bal, Decimal('30'))
+
   def test_open_buy_with_no_stop_loss_uses_full_notional_as_margin(self):
     datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
     (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
