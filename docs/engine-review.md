@@ -35,13 +35,6 @@ simplification.
   cost for short positions, no multi-currency.** None of these are modeled
   at all; not required at this scale, but a real gap if the simulator's
   ambitions grow.
-- **Portfolio risk limits cap margin exposure and position counts, not
-  true net exposure.** `Broker.execute_orders_to_open` supports optional
-  `max_open_positions_per_trader`/`max_open_positions_per_instrument`/
-  `max_margin_exposure_per_trader` gates, but the exposure cap sums every
-  position's margin regardless of direction - a long and an offsetting
-  short on the same instrument both count fully against it, rather than
-  netting against each other the way a true "net exposure" figure would.
 - **Order types are a fixed shape**: market fill + optional stop-loss +
   optional take-profit + optional expiry. No limit orders, no trailing
   stops (already called out per-strategy in `ATRTrendFollowingStrategy`'s
@@ -104,18 +97,18 @@ their own planned piece of work:
 
 ## Biggest bang-for-buck
 
-Net long/short exposure per instrument in the portfolio risk limits (§1) —
-`Broker._exceeds_max_margin_exposure_per_trader` currently checks
-`trader.ac.margin_bal + margin` against the cap, a flat sum across every
-open position regardless of direction, so a long and an offsetting short
-on the same instrument both count fully against it instead of netting
-out. The fix is scoped to that one check (and its sibling computation at
-order-open time): group the trader's open positions' margin by
-instrument, sum each instrument's margin *signed* by `buysell` (long
-positive, short negative), then sum the *magnitudes* of those per-
-instrument totals for the trader-level figure compared against the cap.
-`get_open_positions_for_trader` (already used by the two sibling
-open-position-count checks) is the only new data needed - no new order
-type, no strategy-level change, and every existing single-direction test
-case reduces to today's flat sum (its per-instrument signed total already
-equals its absolute value).
+Add a flat per-trade commission, distinct from the existing per-unit
+`transaction_cost` spread (§1) — `Broker.calc_execution_price`/
+`apply_exit_cost` already model a price-based spread cost charged
+per-unit on every fill, but there's still no separate fixed cash fee
+charged per trade regardless of size (a real cost at small quantities,
+where a flat commission dominates a per-unit spread). Unlike
+`transaction_cost`, which moves the recorded execution/exit price
+itself, a flat commission is simplest as a direct cash deduction at
+each fill: a new optional `Broker.commission_per_trade` (default 0,
+preserving today's behavior) debited from `cash_bal` once per fill,
+alongside the existing margin sequestration on open and the margin
+release on every close path (`_close_position`, and `handle_expiry`'s
+two branches). Same shape of change as the last several rounds - an
+optional, additive parameter threaded through the same fill points
+`transaction_cost` already touches, defaulting to a no-op.
