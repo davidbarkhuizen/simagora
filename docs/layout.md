@@ -7,7 +7,6 @@ src/simagora/
   domain/       order data model - independent of simulation mechanics
   engine/       simulation mechanics - orchestration and execution
   marketdata/   CSV-backed historical price data access
-  reporting/    empty package (Simulator.plot() does its own inline plotting)
   launcher.py   entry point (Launcher, main())
   timer.py      small perf-timing helper (mostly unused, see below)
 tests/
@@ -78,11 +77,6 @@ to be run from the repo root.
   above already accepts but a plain `DataFeed` ignores (it only ever tracks one).
   Exposes the identical method set, so it's a drop-in replacement anywhere a
   "datafeed" is expected. See [Multi-instrument support](multi-instrument.md).
-
-## `reporting/`
-
-An empty package (`__init__.py` only). `Simulator.plot()` does its own inline
-matplotlib plotting; nothing in this package is currently used.
 
 ## Top level
 
