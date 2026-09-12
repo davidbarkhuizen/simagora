@@ -197,3 +197,24 @@ class Account(HasAutoId):
     self.d_cash_bal[date] = self.cash_bal
     self.d_margin_bal[date] = self.margin_bal
     self.d_net_booked_position[date] = self.net_booked_position
+
+  def equity(self, date):
+    '''
+    total account value at date: recorded cash + margin held + net
+    unrealized P&L on positions still open that day - the "mark to
+    market" net worth a strategy can size against, unlike cash_bal
+    alone which excludes margin sequestered in open positions.
+    Requires record_end_of_day_balances(date)/record_net_end_of_day_pos(date)
+    to have already run for date (as Simulator.run() does every trading
+    day) - raises KeyError otherwise, same as reading d_cash_bal/
+    d_margin_bal directly would.
+    '''
+    return self.d_cash_bal[date] + self.d_margin_bal[date] + self.net_open_position.get(date, Decimal(0))
+
+  def equity_curve(self):
+    '''
+    (date, equity) pairs for every date balances have been recorded
+    for, oldest first - the series engine.stats's metrics are computed
+    from
+    '''
+    return [(d, self.equity(d)) for d in sorted(self.d_cash_bal.keys())]
