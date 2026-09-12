@@ -32,10 +32,16 @@ simplification.
   field that would support it.
 - **No position sizing primitives.** Quantity is always a strategy-chosen
   integer (`1`, or a hand-computed share count for DollarCostAveraging/
-  ValueAveraging). `Account` has no single "current equity" accessor
-  (cash + margin + unrealized P&L) for a strategy to size against —
-  %-of-equity or volatility-targeted sizing would need to be reinvented
+  ValueAveraging). `Account.equity(date)` now gives a single "current
+  equity" figure (see §3), but no strategy actually sizes against it yet —
+  %-of-equity or volatility-targeted sizing would still need to be built
   per-strategy.
+- **`Account.closed_trades` is dead.** Initialized in `__init__` but never
+  appended to anywhere — every position close path (`_close_position`,
+  `stop_loss`, `handle_expiry`) updates `cash_bal`/`margin_bal`/
+  `net_booked_position` and the position's own `term_notice`, but none of
+  them record onto this list. Blocks trade-level reporting (win rate,
+  average win/loss, trade count) until it's wired up.
 - **No margin calls / forced liquidation, no leverage limits, no borrow
   cost for short positions, no multi-currency.** None of these are modeled
   at all; not required at this scale, but a real gap if the simulator's
@@ -67,16 +73,15 @@ not re-litigated:
 Reasonable next capabilities that fit the existing architecture without a
 rewrite:
 
-- **Analytics/reporting.** `Simulator.plot()` is the only reporting
-  surface — a matplotlib PNG plus a couple of `logging.info` lines. There
-  is no Sharpe ratio, max drawdown, CAGR, win rate, or trade-level summary
-  anywhere. `Account` already tracks daily `d_cash_bal`/`d_margin_bal`/
-  `d_net_booked_position`/`net_open_position` time series, so a
-  `Report`/`stats.py` module computing standard performance metrics off
-  that existing data would be a low-friction addition.
-- **An `Account.equity(date)` accessor** (cash + margin + unrealized
-  open-position P&L) would both unlock equity-based position sizing in
-  strategies and simplify reporting.
+- ~~**Analytics/reporting.**~~ Done: `Account.equity(date)`/`equity_curve()`
+  (cash + margin + unrealized open-position P&L, off the daily
+  `d_cash_bal`/`d_margin_bal`/`net_open_position` series already tracked)
+  plus `engine/stats.py` (`total_return`, `cagr`, `max_drawdown`,
+  `sharpe_ratio`) now cover CAGR/drawdown/Sharpe off that existing data.
+  Still missing: win rate and trade-level summaries, which need
+  `Account.closed_trades` actually wired up (it's initialized but never
+  appended to) — a separate, smaller follow-on. `Simulator.plot()` remains
+  the only *chart* surface.
 - **Transaction cost modeling** could slot into
   `Broker.calc_execution_price`/`_calc_execution_price_or_reject` as an
   optional cost parameter without touching call sites.
@@ -110,7 +115,10 @@ rewrite:
 
 ## Biggest bang-for-buck
 
-An `Account.equity()` accessor plus a small stats module (Sharpe/drawdown/
-CAGR off the data already being tracked) — both are additive, don't touch
-existing logic, and would immediately make every strategy backtest more
-useful to look at.
+~~An `Account.equity()` accessor plus a small stats module (Sharpe/drawdown/
+CAGR off the data already being tracked)~~ — done, see §3. Both were
+additive and touched no existing logic.
+
+Next biggest bang-for-buck: wire up `Account.closed_trades` (§1) so
+win rate and average win/loss can be added to `stats.py` alongside CAGR/
+drawdown/Sharpe.

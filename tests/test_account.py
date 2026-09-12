@@ -102,6 +102,57 @@ class TestTallyOpenPositionsCalendarGap(unittest.TestCase):
     self.assertEqual(self.trader.ac.net_open_position[DAY2], Decimal('0'))
 
 
+class TestEquity(unittest.TestCase):
+
+  def test_equity_sums_cash_margin_and_unrealized_pnl(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('115'), 'low': Decimal('108'), 'close': Decimal('112')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+    open_position(trader, broker, DAY1, quantity=5)
+    # exec price = 100, margin = (100-90)*5 = 50, cash_bal = 9950
+
+    trader.ac.tally_individual_open_positions(DAY2)
+    trader.ac.record_net_end_of_day_pos(DAY2)
+    trader.ac.record_end_of_day_balances(DAY2)
+
+    # unrealized pnl at DAY2: pdelta = 112-100 = 12, * qty(5) * leverage(1) = 60
+    self.assertEqual(trader.ac.net_open_position[DAY2], Decimal('60'))
+    self.assertEqual(trader.ac.equity(DAY2), Decimal('9950') + Decimal('50') + Decimal('60'))
+
+  def test_equity_with_no_open_positions_is_just_cash_plus_margin(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+
+    trader.ac.tally_individual_open_positions(DAY1)
+    trader.ac.record_net_end_of_day_pos(DAY1)
+    trader.ac.record_end_of_day_balances(DAY1)
+
+    self.assertEqual(trader.ac.equity(DAY1), Decimal('10000'))
+
+  def test_equity_curve_returns_dates_in_order_with_matching_equity(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('115'), 'low': Decimal('108'), 'close': Decimal('112')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+
+    for d in (DAY1, DAY2):
+      trader.ac.tally_individual_open_positions(d)
+      trader.ac.record_net_end_of_day_pos(d)
+      trader.ac.record_end_of_day_balances(d)
+
+    curve = trader.ac.equity_curve()
+
+    self.assertEqual([d for d, _ in curve], [DAY1, DAY2])
+    self.assertEqual(curve[0][1], trader.ac.equity(DAY1))
+    self.assertEqual(curve[1][1], trader.ac.equity(DAY2))
+
+
 class TestHandleExpirySign(unittest.TestCase):
   '''
   handle_expiry's "expired out of the money" branch previously
