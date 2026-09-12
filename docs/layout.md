@@ -90,11 +90,16 @@ to be run from the repo root.
   running extreme), n-day standard deviation (used for Bollinger-Band-style
   bands), n-day return (the fractional change in a price field between a date
   and n trading days before it - a point-in-time lookback, unlike the other
-  `n_day_*` methods which are all window aggregates), and n-day RSI (Cutler's
+  `n_day_*` methods which are all window aggregates), n-day RSI (Cutler's
   variant - a simple, not Wilder-smoothed, average of gains/losses over the
   window, consistent with every other `n_day_*` method's plain trailing-window
   style; needs n+1 trailing bars for the n day-over-day changes it's built
-  from). See [Data](data.md) for where it reads from. `get_price`/
+  from), and n-day ATR (Average True Range - the largest of a day's own
+  high-low range, the gap up from the previous close to today's high, and the
+  gap down from the previous close to today's low, simple-averaged the same
+  way; also needs n+1 trailing bars, and takes no `price` field since True
+  Range is inherently built from high, low, *and* close together). See
+  [Data](data.md) for where it reads from. `get_price`/
   `get_price_info`/`date_is_trading_day` all resolve through the same
   `_index_of(date)` scan the `n_day_*` helpers already use, rather than each
   re-scanning `self.feed` for a matching date on its own.

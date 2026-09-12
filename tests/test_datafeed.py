@@ -12,8 +12,9 @@ class TestDataFeed(unittest.TestCase):
   exercises the real DataFeed against a small real CSV fixture -
   n_day_moving_avg/n_day_high/n_day_low/n_day_std_dev are only ever
   tested indirectly, through FakeDataFeed's parallel reimplementation,
-  elsewhere in the suite. n_day_rsi is hand-verified directly here,
-  since no strategy test exercises it yet at the time this was added
+  elsewhere in the suite. n_day_rsi/n_day_atr are hand-verified
+  directly here, since no strategy test exercises them yet at the
+  time each was added
   '''
 
   def setUp(self):
@@ -104,6 +105,19 @@ class TestDataFeed(unittest.TestCase):
   def test_n_day_rsi_returns_none_without_enough_preceding_history(self):
     # n=3 needs 4 trailing bars; the very first day only has 1
     self.assertIsNone(self.datafeed.n_day_rsi(self.instrument, date(2010, 1, 1), 'close', 3))
+
+  def test_n_day_atr_matches_hand_computed_value(self):
+    # bars 1-4: (high,low,close) = (101,99,100), (103,100,102), (103,97,98), (107,98,106)
+    # True Range day2 (prev close 100): max(103-100=3, |103-100|=3, |100-100|=0) = 3
+    # True Range day3 (prev close 102): max(103-97=6, |103-102|=1, |97-102|=5) = 6
+    # True Range day4 (prev close 98):  max(107-98=9, |107-98|=9, |98-98|=0)   = 9
+    # ATR = mean(3, 6, 9) = 6
+    atr = self.datafeed.n_day_atr(self.instrument, date(2010, 1, 4), 3)
+    self.assertEqual(atr, Decimal('6'))
+
+  def test_n_day_atr_returns_none_without_enough_preceding_history(self):
+    # n=3 needs 4 trailing bars; the very first day only has 1
+    self.assertIsNone(self.datafeed.n_day_atr(self.instrument, date(2010, 1, 1), 3))
 
   def test_trailing_dates_includes_the_given_date(self):
     dates = self.datafeed.trailing_dates(date(2010, 1, 3), 3, include_current=True)
