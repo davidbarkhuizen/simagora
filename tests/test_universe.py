@@ -63,6 +63,11 @@ class TestUniverse(unittest.TestCase):
     ret = self.universe.n_day_return('AAA', date(2010, 1, 2), 'close', 1)
     self.assertEqual(ret, (Decimal('106') - Decimal('102')) / Decimal('102'))
 
+  def test_n_day_rsi_routes_correctly_too(self):
+    # AAA's lone change, 102 -> 106, is a gain with no losses at all
+    rsi = self.universe.n_day_rsi('AAA', date(2010, 1, 2), 'close', 1)
+    self.assertEqual(rsi, Decimal('100'))
+
   def test_unknown_instrument_raises_a_clear_error(self):
     with self.assertRaises(ValueError):
       self.universe.get_price('CCC', date(2010, 1, 1), 'close')

@@ -12,7 +12,8 @@ class TestDataFeed(unittest.TestCase):
   exercises the real DataFeed against a small real CSV fixture -
   n_day_moving_avg/n_day_high/n_day_low/n_day_std_dev are only ever
   tested indirectly, through FakeDataFeed's parallel reimplementation,
-  elsewhere in the suite
+  elsewhere in the suite. n_day_rsi is hand-verified directly here,
+  since no strategy test exercises it yet at the time this was added
   '''
 
   def setUp(self):
@@ -87,6 +88,22 @@ class TestDataFeed(unittest.TestCase):
   def test_n_day_return_returns_none_without_enough_preceding_history(self):
     # the very first day has no preceding day to compare against
     self.assertIsNone(self.datafeed.n_day_return(self.instrument, date(2010, 1, 1), 'close', 1))
+
+  def test_n_day_rsi_matches_hand_computed_value(self):
+    # closes days 1-4: 100, 102, 98, 106 -> changes +2, -4, +8
+    # avg_gain = (2+0+8)/3 = 10/3, avg_loss = (0+4+0)/3 = 4/3, RS = 2.5
+    # RSI = 100 - 100/3.5 = 500/7 ~= 71.4286
+    rsi = self.datafeed.n_day_rsi(self.instrument, date(2010, 1, 4), 'close', 3)
+    self.assertAlmostEqual(float(rsi), 500.0 / 7.0, places=9)
+
+  def test_n_day_rsi_is_100_when_there_are_no_losses_in_the_window(self):
+    # single change from day1 (100) to day2 (102): a lone gain, no losses at all
+    rsi = self.datafeed.n_day_rsi(self.instrument, date(2010, 1, 2), 'close', 1)
+    self.assertEqual(rsi, Decimal('100'))
+
+  def test_n_day_rsi_returns_none_without_enough_preceding_history(self):
+    # n=3 needs 4 trailing bars; the very first day only has 1
+    self.assertIsNone(self.datafeed.n_day_rsi(self.instrument, date(2010, 1, 1), 'close', 3))
 
   def test_trailing_dates_includes_the_given_date(self):
     dates = self.datafeed.trailing_dates(date(2010, 1, 3), 3, include_current=True)

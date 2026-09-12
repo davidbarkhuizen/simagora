@@ -99,6 +99,36 @@ class DataFeed(object):
       return None
     return (today_value - past_value) / past_value
 
+  def n_day_rsi(self, instrument, date, price, n):
+    '''
+    Cutler's RSI - a simple (not Wilder's exponentially-smoothed)
+    average of gains/losses, consistent with every other n_day_*
+    method's plain trailing-window style: 100 - (100 / (1 + RS)), RS
+    being the ratio of the average gain to the average loss in
+    `price` over the n trading-day changes ending at date (needs n+1
+    trailing bars - one more than the n changes themselves). None
+    without n+1 days of history yet; 100 if there were no losses at
+    all in the window (avg_loss == 0), rather than dividing by zero
+    '''
+    values = self._trailing_values(date, price, n + 1, include_current=True)
+    if (len(values) < n + 1):
+      return None
+
+    chronological = list(reversed(values))  # _trailing_values is most-recent-first
+    gains = []
+    losses = []
+    for i in range(1, len(chronological)):
+      change = chronological[i] - chronological[i - 1]
+      gains.append(change if (change > 0) else Decimal(0))
+      losses.append(-change if (change < 0) else Decimal(0))
+
+    avg_gain = mean(gains)
+    avg_loss = mean(losses)
+    if (avg_loss == 0):
+      return Decimal(100)
+
+    return Decimal(100) - (Decimal(100) / (Decimal(1) + (avg_gain / avg_loss)))
+
   def get_price(self, instrument, date, price):
     info = self.get_price_info(instrument, date)
     return info[price] if (info is not None) else None

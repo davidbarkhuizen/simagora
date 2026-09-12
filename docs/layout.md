@@ -85,12 +85,16 @@ to be run from the repo root.
   lookups, n-day moving averages, n-day highs/lows (used for breakout signals -
   these exclude the given date itself, since a value is always part of its own
   running extreme), n-day standard deviation (used for Bollinger-Band-style
-  bands), and n-day return (the fractional change in a price field between a date
+  bands), n-day return (the fractional change in a price field between a date
   and n trading days before it - a point-in-time lookback, unlike the other
-  `n_day_*` methods which are all window aggregates). See [Data](data.md) for
-  where it reads from. `get_price`/`get_price_info`/`date_is_trading_day` all
-  resolve through the same `_index_of(date)` scan the `n_day_*` helpers already
-  use, rather than each re-scanning `self.feed` for a matching date on its own.
+  `n_day_*` methods which are all window aggregates), and n-day RSI (Cutler's
+  variant - a simple, not Wilder-smoothed, average of gains/losses over the
+  window, consistent with every other `n_day_*` method's plain trailing-window
+  style; needs n+1 trailing bars for the n day-over-day changes it's built
+  from). See [Data](data.md) for where it reads from. `get_price`/
+  `get_price_info`/`date_is_trading_day` all resolve through the same
+  `_index_of(date)` scan the `n_day_*` helpers already use, rather than each
+  re-scanning `self.feed` for a matching date on its own.
 - `universe.py` — `Universe`, a multi-instrument sibling of `DataFeed`: one
   `DataFeed` per instrument, dispatched by the `instrument` argument every method
   above already accepts but a plain `DataFeed` ignores (it only ever tracks one).
