@@ -8,11 +8,13 @@ it isn't re-tested here
 
 import unittest
 from decimal import Decimal
-from datetime import timedelta
 
 from simagora.engine.strategy import DualMovingAverageCrossoverStrategy
 
-from testutil import FakeDataFeed, DAY1, make_trader_with_strategy, submitted_orders, assert_banded_order
+from testutil import (
+  FakeDataFeed, DAY1, make_trader_with_strategy, make_flat_range_prices,
+  submitted_orders, assert_banded_order,
+)
 
 
 class _ShortLookbackDualMACrossover(DualMovingAverageCrossoverStrategy):
@@ -25,12 +27,7 @@ class TestDualMovingAverageCrossoverStrategy(unittest.TestCase):
 
   def make_datafeed_with_today(self, today_close):
     '''3 flat days at 100, followed by one more day carrying today_close'''
-    prices = {}
-    d = DAY1
-    for i in range(3):
-      prices[d] = {'high': Decimal('100'), 'low': Decimal('100'), 'close': Decimal('100')}
-      d = d + timedelta(days=1)
-    today = d
+    prices, today = make_flat_range_prices(3, Decimal('100'), Decimal('100'), Decimal('100'))
     prices[today] = {'high': today_close, 'low': today_close, 'close': today_close}
     return FakeDataFeed(prices), today
 

@@ -280,9 +280,12 @@ def make_flat_range_prices(num_days, high, low, close, start_date=DAY1):
   num_days flat, range-bound trading days (fixed high/low/close)
   starting at start_date; returns (prices, next_date) where next_date
   is the first date after the flat range - shared by
-  TestTrendFollowingStrategy/TestATRTrendFollowingStrategy, whose
-  Donchian-channel entry logic needs a flat range to break out of.
-  The caller adds its own breakout day at next_date.
+  TestTrendFollowingStrategy/TestATRTrendFollowingStrategy (whose
+  Donchian-channel entry logic needs a flat range to break out of) and
+  TestDualMovingAverageCrossoverStrategy (whose moving-average
+  crossover needs one to establish a flat starting average). The
+  caller adds its own following day (a breakout, or today's close) at
+  next_date.
   '''
   prices = {}
   d = start_date
