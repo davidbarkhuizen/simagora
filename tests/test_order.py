@@ -1,10 +1,9 @@
 import unittest
 from decimal import Decimal
-from datetime import date
 
 from simagora.domain.order import Order
 
-DAY1 = date(2010, 1, 1)
+from testutil import DAY1
 
 
 class TestOrderHasNoVestigialTargetFields(unittest.TestCase):
