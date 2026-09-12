@@ -167,6 +167,24 @@ class Account(HasAutoId):
     '''
     return self.d_cash_bal[date] + self.d_margin_bal[date] + self.net_open_position.get(date, Decimal(0))
 
+  def quantity_for_equity_fraction(self, date, price, fraction, leverage=Decimal(1)):
+    '''
+    whole-unit quantity that `fraction` of today's equity(date) buys at
+    `price` and `leverage`: floor(equity(date) * fraction * leverage /
+    price), so a %-of-equity or volatility-targeted sizing rule doesn't
+    over-commit capital by rounding up. 0 if the resulting budget
+    doesn't cover even one unit - including a non-positive fraction, a
+    non-positive price, or negative equity, any of which would
+    otherwise floor-divide into a nonsensical negative or undefined
+    quantity. A strategy can call this instead of hand-computing its
+    own share count the way DollarCostAveraging/ValueAveraging
+    currently do.
+    '''
+    budget = self.equity(date) * fraction * leverage
+    if (budget <= 0) or (price <= 0):
+      return Decimal(0)
+    return budget // price
+
   def equity_curve(self):
     '''
     (date, equity) pairs for every date balances have been recorded
