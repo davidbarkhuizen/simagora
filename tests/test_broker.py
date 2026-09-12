@@ -293,6 +293,71 @@ class TestTransactionCost(unittest.TestCase):
     self.assertEqual(trader.ac.net_booked_position, Decimal('8'))
 
 
+class TestCommissionPerTrade(unittest.TestCase):
+  '''
+  commission_per_trade is a flat cash fee charged once per fill (open
+  and close), distinct from transaction_cost's per-unit price
+  adjustment - it's a pure cash_bal debit and never moves the recorded
+  execution/exit price or a trade's own pnl
+  '''
+
+  def test_open_charges_the_commission_on_top_of_margin(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1, commission_per_trade=Decimal('2'))
+
+    open_position(trader, broker, DAY1)
+
+    # exec price = 100, margin = 100-90 = 10 (unaffected: commission
+    # doesn't move the execution price), cash_bal down by margin+commission
+    self.assertEqual(trader.ac.margin_bal, Decimal('10'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9988'))
+
+  def test_open_is_rejected_when_margin_plus_commission_exceeds_cash(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10'), 's&p500', DAY1, DAY1, commission_per_trade=Decimal('1'))
+
+    # margin alone (10) exactly matches cash_bal (10), but +1 commission doesn't fit
+    order = Order('s&p500', 'buy', 1, Decimal('90'), Decimal('110'), DAY1)
+    trader.submit_order(order)
+    broker.execute_orders_to_open(DAY1)
+
+    self.assertEqual(len(broker.open_positions), 0)
+    receipts = receiptQ.extract_matching(lambda r: r.order is order)
+    self.assertEqual(receipts[0].status, 'insufficient_cash_bal')
+
+  def test_close_charges_the_commission_without_affecting_pnl(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('115'), 'low': Decimal('105'), 'close': Decimal('110')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2, commission_per_trade=Decimal('2'))
+    pos = open_position(trader, broker, DAY1)
+    # exec price = 100, margin = 10, cash_bal = 10000-10-2 = 9988
+
+    close_order = CloseOrder(pos.id, DAY2)
+    trader.submit_order(close_order)
+    broker.execute_orders_to_close(DAY2)
+
+    # close exec price = (115+105)/2 = 110, pdelta = 10, pnl = 10 -
+    # unaffected by commission; cash_bal = 9988 + margin(10) + pnl(10) - commission(2) = 10006
+    self.assertEqual(trader.ac.margin_bal, Decimal('0'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('10006'))
+    self.assertEqual(trader.ac.net_booked_position, Decimal('10'))
+    self.assertEqual(trader.ac.trade_pnls(), [Decimal('10')])
+
+  def test_defaults_to_zero_matching_the_original_no_commission_behavior(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+
+    open_position(trader, broker, DAY1)
+
+    self.assertEqual(trader.ac.cash_bal, Decimal('9990'))
+
+
 class TestPortfolioRiskLimits(unittest.TestCase):
 
   def test_no_limits_configured_leaves_opening_unconstrained(self):

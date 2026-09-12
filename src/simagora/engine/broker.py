@@ -10,12 +10,22 @@ from ..domain.position import Position
 class Broker(object):  
   
   def __init__(self, datafeed, orderQ, receiptQ, term_req_Q, term_notice_Q, transaction_cost=Decimal(0),
-               max_open_positions_per_trader=None, max_open_positions_per_instrument=None,
-               max_margin_exposure_per_trader=None):
+               commission_per_trade=Decimal(0), max_open_positions_per_trader=None,
+               max_open_positions_per_instrument=None, max_margin_exposure_per_trader=None):
     '''
     transaction_cost: a flat per-unit cost (in price terms) charged
     against every fill's execution price - see calc_execution_price.
     Defaults to 0, the original cost-free execution assumption.
+
+    commission_per_trade: a flat cash fee charged once per fill (both
+    opening and closing a position), independent of quantity/leverage/
+    price - distinct from transaction_cost, which is a per-unit price
+    adjustment baked into the fill price (and so into a trade's own
+    realized pnl) itself. commission_per_trade is instead debited
+    directly from cash_bal and never affects the recorded execution/
+    exit price or a trade's own pnl, the same way a real brokerage
+    statement keeps commissions as a separate line from realized
+    gain/loss. Defaults to 0, the original no-commission behavior.
 
     max_open_positions_per_trader/max_open_positions_per_instrument/
     max_margin_exposure_per_trader: optional portfolio-level risk
@@ -31,6 +41,7 @@ class Broker(object):
     self.term_notice_Q = term_notice_Q
 
     self.transaction_cost = transaction_cost
+    self.commission_per_trade = commission_per_trade
 
     self.max_open_positions_per_trader = max_open_positions_per_trader
     self.max_open_positions_per_instrument = max_open_positions_per_instrument
@@ -182,13 +193,15 @@ class Broker(object):
         receipt = OrderReceipt(order, 'max_open_positions_per_instrument_exceeded', 0, date, 0)
       elif (self._exceeds_max_margin_exposure_per_trader(order, margin)):
         receipt = OrderReceipt(order, 'max_margin_exposure_per_trader_exceeded', 0, date, 0)
-      elif (margin > trader.ac.cash_bal):
+      elif ((margin + self.commission_per_trade) > trader.ac.cash_bal):
         receipt = OrderReceipt(order, 'insufficient_cash_bal', 0, date, 0)
       else:
-        # sequester margin amount from client cash account
+        # sequester margin amount from client cash account, plus a
+        # flat per-trade commission (see __init__) that's never returned
         trader.ac.margin_bal += margin
-        trader.ac.cash_bal -= margin        
-        
+        trader.ac.cash_bal -= margin
+        trader.ac.cash_bal -= self.commission_per_trade
+
         receipt = OrderReceipt(order, 'opened', exec_price, date, margin)
         position = Position(receipt)
         receipt.position_id = position.id
