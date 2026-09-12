@@ -298,6 +298,46 @@ class TestEquity(unittest.TestCase):
     self.assertEqual(curve[1][1], trader.ac.equity(DAY2))
 
 
+class TestQuantityForEquityFraction(unittest.TestCase):
+
+  def setUp(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, self.trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+
+    self.trader.ac.tally_individual_open_positions(DAY1)
+    self.trader.ac.record_net_end_of_day_pos(DAY1)
+    self.trader.ac.record_end_of_day_balances(DAY1)
+    # equity(DAY1) == 10000 (no open positions, no trades yet)
+
+  def test_floors_the_budget_down_to_a_whole_unit(self):
+    # 5% of 10000 = 500, / price(30) = 16.67 -> floors to 16
+    qty = self.trader.ac.quantity_for_equity_fraction(DAY1, Decimal('30'), Decimal('0.05'))
+    self.assertEqual(qty, Decimal('16'))
+
+  def test_scales_with_leverage(self):
+    # 5% of 10000 = 500, * leverage(2) = 1000, / price(30) = 33.33 -> 33
+    qty = self.trader.ac.quantity_for_equity_fraction(
+      DAY1, Decimal('30'), Decimal('0.05'), leverage=Decimal('2'))
+    self.assertEqual(qty, Decimal('33'))
+
+  def test_zero_when_the_budget_does_not_cover_even_one_unit(self):
+    # 1% of 10000 = 100, / price(150) = 0.67 -> floors to 0
+    qty = self.trader.ac.quantity_for_equity_fraction(DAY1, Decimal('150'), Decimal('0.01'))
+    self.assertEqual(qty, Decimal('0'))
+
+  def test_zero_for_a_non_positive_fraction(self):
+    qty = self.trader.ac.quantity_for_equity_fraction(DAY1, Decimal('30'), Decimal('0'))
+    self.assertEqual(qty, Decimal('0'))
+
+    qty = self.trader.ac.quantity_for_equity_fraction(DAY1, Decimal('30'), Decimal('-0.1'))
+    self.assertEqual(qty, Decimal('0'))
+
+  def test_zero_for_a_non_positive_price(self):
+    qty = self.trader.ac.quantity_for_equity_fraction(DAY1, Decimal('0'), Decimal('0.05'))
+    self.assertEqual(qty, Decimal('0'))
+
+
 class TestHandleExpirySign(unittest.TestCase):
   '''
   handle_expiry's "expired out of the money" branch previously

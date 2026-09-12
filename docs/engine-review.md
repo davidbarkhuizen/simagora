@@ -17,12 +17,6 @@ simplification.
   strategy ever reads it — split/dividend-adjusted pricing (corporate
   actions) isn't actually applied even though the data pipeline carries the
   field that would support it.
-- **No position sizing primitives.** Quantity is always a strategy-chosen
-  integer (`1`, or a hand-computed share count for DollarCostAveraging/
-  ValueAveraging). `Account.equity(date)` now gives a single "current
-  equity" figure (see §3), but no strategy actually sizes against it yet —
-  %-of-equity or volatility-targeted sizing would still need to be built
-  per-strategy.
 - **No margin calls / forced liquidation, no leverage limits, no borrow
   cost for short positions, no multi-currency.** None of these are modeled
   at all; not required at this scale, but a real gap if the simulator's
@@ -78,27 +72,25 @@ rewrite - none outstanding right now; `Simulator.report_performance()`
 
 ## Quick fixes
 
-Small, low-risk items — worth doing opportunistically rather than as
-their own planned piece of work:
-
-- **`Order.target_price`/`target_floor`/`target_ceiling`** are accepted in
-  `Order.__init__` and stored, but never read anywhere in the codebase —
-  vestigial/unused fields; a candidate for straight removal (see §1)
-  rather than eventual wiring-up, since nothing currently constructs an
-  `Order` expecting them to do anything.
+None outstanding right now — the one entry here (removing
+`Order.target_price`/`target_floor`/`target_ceiling`) is promoted to
+"Biggest bang-for-buck" below, since nothing smaller/lower-risk is left
+queued behind it.
 
 ## Biggest bang-for-buck
 
-Add an `Account`-level position-sizing primitive off `equity(date)`
-(§1) — `Account.equity(date)` already gives a single "current equity"
-figure, but nothing in the engine turns "size this trade as X% of
-equity" into an actual quantity; DollarCostAveraging/ValueAveraging
-each hand-roll their own share-count arithmetic instead. A scoped,
-additive fix: an `Account.quantity_for_equity_fraction(date, price,
-fraction, leverage=Decimal(1))` method - `floor(equity(date) * fraction
-* leverage / price)` - gives every strategy a shared, tested way to
-turn a sizing rule into a whole-unit quantity without hand-computing it
-per-strategy. Purely new surface (nothing currently calls it), so it's
-zero-risk to add; %-of-equity or volatility-targeted sizing strategies
-built afterward are a separate, later piece of (strategy-side) work
-this only unblocks.
+Remove `Order.target_price`/`target_floor`/`target_ceiling` (§1) —
+accepted in `Order.__init__` and stored, but never read anywhere in the
+codebase, and nothing currently constructs an `Order` expecting them to
+do anything. Every other well-scoped, additive engine-level gap this
+review originally flagged has now been closed (transaction cost on
+every exit path, stop-loss slippage, net margin exposure, performance
+stats surfaced from a real run, missing output directories, a flat
+commission, and now `Account.quantity_for_equity_fraction`); what's
+left in §1 (a fee model beyond a flat commission, corporate-actions
+pricing, margin calls/leverage limits, new order types) each represents
+a real design decision rather than a small additive change. This
+vestigial-field removal is the only remaining item small enough to
+still call "biggest bang-for-buck" - a straight deletion, not a design
+question - so it's promoted here rather than left to languish under
+"Quick fixes."
