@@ -39,6 +39,13 @@ simplification.
   cost for short positions, no multi-currency.** None of these are modeled
   at all; not required at this scale, but a real gap if the simulator's
   ambitions grow.
+- **Portfolio risk limits cap margin exposure and position counts, not
+  true net exposure.** `Broker.execute_orders_to_open` supports optional
+  `max_open_positions_per_trader`/`max_open_positions_per_instrument`/
+  `max_margin_exposure_per_trader` gates, but the exposure cap sums every
+  position's margin regardless of direction - a long and an offsetting
+  short on the same instrument both count fully against it, rather than
+  netting against each other the way a true "net exposure" figure would.
 - **Order types are a fixed shape**: market fill + optional stop-loss +
   optional take-profit + optional expiry. No limit orders, no trailing
   stops (already called out per-strategy in `ATRTrendFollowingStrategy`'s
@@ -73,10 +80,6 @@ rewrite:
   `Simulator`/`Launcher` invokes them. `Simulator.plot()` remains the only
   actual reporting surface, and it's still just a matplotlib PNG plus a
   couple of `logging.info` lines.
-- **Portfolio-level risk controls** (max concurrent positions, max
-  gross/net exposure, per-instrument or per-trader position limits) —
-  `Broker`/`Account` already have all the bookkeeping these would read
-  from; there's just no gate that consults it before opening.
 
 ## 4. Genuine engine-level edge cases worth flagging
 
@@ -101,10 +104,12 @@ rewrite:
 
 ## Biggest bang-for-buck
 
-Portfolio-level risk controls (§3) — a gate `Broker.execute_orders_to_open`
-consults before committing an order (max concurrent positions, max
-gross/net exposure, per-instrument or per-trader position limits).
-`Broker`/`Account` already track everything such a gate would need to read
-(`open_positions`, `get_open_positions_for_trader`, `cash_bal`/`margin_bal`);
-it's additive, and touches only the one method that currently commits every
-order unconditionally once margin is available.
+Surface `engine/stats.py`'s metrics in a real run (§3) — right now
+`total_return`/`cagr`/`max_drawdown`/`sharpe_ratio`/`win_rate`/
+`average_win`/`average_loss` are pure library calls nothing in
+`Simulator`/`Launcher` invokes; `Simulator.plot()` remains a matplotlib PNG
+plus a couple of `logging.info` lines. Computing them off
+`trader.ac.equity_curve()`/`trader.ac.trade_pnls()` and logging/printing
+the result at the end of a run (e.g. from `Launcher.report()`) is additive,
+touches no existing logic, and finally makes every one of those already-built
+metrics visible from an actual backtest instead of only from its own test suite.

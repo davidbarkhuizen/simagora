@@ -192,20 +192,29 @@ class FakeUniverse(SpreadStatsMixin):
     return any(feed.get_price_info(None, d) is not None for feed in self.feeds.values())
 
 
-def make_broker(datafeed=None, transaction_cost=Decimal(0)):
+def make_broker(datafeed=None, transaction_cost=Decimal(0), max_open_positions_per_trader=None,
+                 max_open_positions_per_instrument=None, max_margin_exposure_per_trader=None):
   '''construct a Broker with fresh MsgQs; returns (orderQ, receiptQ, term_req_Q, term_notice_Q, broker)'''
   orderQ = MsgQ()
   receiptQ = MsgQ()
   term_req_Q = MsgQ()
   term_notice_Q = MsgQ()
-  broker = Broker(datafeed, orderQ, receiptQ, term_req_Q, term_notice_Q, transaction_cost=transaction_cost)
+  broker = Broker(datafeed, orderQ, receiptQ, term_req_Q, term_notice_Q, transaction_cost=transaction_cost,
+                   max_open_positions_per_trader=max_open_positions_per_trader,
+                   max_open_positions_per_instrument=max_open_positions_per_instrument,
+                   max_margin_exposure_per_trader=max_margin_exposure_per_trader)
   return orderQ, receiptQ, term_req_Q, term_notice_Q, broker
 
 
 def make_broker_and_trader(datafeed, opening_bal, instrument, start_date, end_date, strategy_name=None,
-                            transaction_cost=Decimal(0)):
+                            transaction_cost=Decimal(0), max_open_positions_per_trader=None,
+                            max_open_positions_per_instrument=None, max_margin_exposure_per_trader=None):
   '''as make_broker(), plus a Trader registered with the broker; returns (..., broker, trader)'''
-  orderQ, receiptQ, term_req_Q, term_notice_Q, broker = make_broker(datafeed, transaction_cost=transaction_cost)
+  orderQ, receiptQ, term_req_Q, term_notice_Q, broker = make_broker(
+    datafeed, transaction_cost=transaction_cost,
+    max_open_positions_per_trader=max_open_positions_per_trader,
+    max_open_positions_per_instrument=max_open_positions_per_instrument,
+    max_margin_exposure_per_trader=max_margin_exposure_per_trader)
   trader = Trader(datafeed, broker, opening_bal, instrument, strategy_name, start_date, end_date)
   return orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader
 

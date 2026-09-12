@@ -19,7 +19,10 @@ class Launcher(object):
   def configure(self, p):
     print('constructing simulator')
     self.sim = Simulator(p['ins'], p['strat'], p['start_date'], p['end_date'], p['open_bal'], self.tstamp,
-                          universe=p.get('universe'), transaction_cost=p.get('transaction_cost', Decimal(0)))
+                          universe=p.get('universe'), transaction_cost=p.get('transaction_cost', Decimal(0)),
+                          max_open_positions_per_trader=p.get('max_open_positions_per_trader'),
+                          max_open_positions_per_instrument=p.get('max_open_positions_per_instrument'),
+                          max_margin_exposure_per_trader=p.get('max_margin_exposure_per_trader'))
 
   def _timed(self, announcement, label, fn):
     '''run fn(), printing announcement first and the elapsed time after,

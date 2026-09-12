@@ -84,7 +84,15 @@ class TestPlotFindsTheRightTrader(unittest.TestCase):
     sim.plot()  # must not raise
 
 
-class TestSimulatorThreadsTransactionCostToBroker(unittest.TestCase):
+class TestSimulatorThreadsBrokerConfigToBroker(unittest.TestCase):
+  '''
+  transaction_cost/max_open_positions_per_trader/
+  max_open_positions_per_instrument/max_margin_exposure_per_trader are
+  all just forwarded from Simulator's own constructor straight to
+  Broker's - covered together here since they'd otherwise risk ending
+  up dead-ended the way Order.leverage once was (accepted somewhere,
+  but with no reachable way to actually set it)
+  '''
 
   def setUp(self):
     self.data_root = tempfile.mkdtemp()
@@ -105,10 +113,23 @@ class TestSimulatorThreadsTransactionCostToBroker(unittest.TestCase):
 
     self.assertEqual(sim.broker.transaction_cost, Decimal('0.05'))
 
-  def test_defaults_to_zero(self):
+  def test_explicit_risk_limits_reach_the_broker(self):
+    sim = Simulator(
+      'testins', ['movavg'], date(2010, 1, 1), date(2010, 1, 1), Decimal('10000'),
+      max_open_positions_per_trader=3, max_open_positions_per_instrument=2,
+      max_margin_exposure_per_trader=Decimal('5000'))
+
+    self.assertEqual(sim.broker.max_open_positions_per_trader, 3)
+    self.assertEqual(sim.broker.max_open_positions_per_instrument, 2)
+    self.assertEqual(sim.broker.max_margin_exposure_per_trader, Decimal('5000'))
+
+  def test_defaults_to_zero_cost_and_no_risk_limits(self):
     sim = Simulator('testins', ['movavg'], date(2010, 1, 1), date(2010, 1, 1), Decimal('10000'))
 
     self.assertEqual(sim.broker.transaction_cost, Decimal('0'))
+    self.assertIsNone(sim.broker.max_open_positions_per_trader)
+    self.assertIsNone(sim.broker.max_open_positions_per_instrument)
+    self.assertIsNone(sim.broker.max_margin_exposure_per_trader)
 
 
 if __name__ == '__main__':

@@ -63,7 +63,12 @@ to be run from the repo root.
   own direction, the opposite of the position's own buysell, so cost is
   charged on both legs of a round trip, not just the entry), opens/closes
   `Position`s, checks stop-loss/take-profit levels against intraday
-  high/low, and updates account balances.
+  high/low, and updates account balances. `execute_orders_to_open` also
+  gates each order behind three optional, independently-off-by-default
+  portfolio risk limits - `max_open_positions_per_trader`,
+  `max_open_positions_per_instrument`, `max_margin_exposure_per_trader` -
+  rejecting with a `max_..._exceeded` receipt status rather than opening
+  the position when one is set and would be breached.
 - `trader.py` — holds a strategy and an `Account`, submits orders, and drains its
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
@@ -98,8 +103,9 @@ to be run from the repo root.
   `from simagora.engine.strategy import ...` still works unchanged wherever it
   was already used.
 - `simulator.py` — drives the day-by-day simulation loop between a start and end
-  date. Takes an optional `transaction_cost` (default `0`), forwarded straight to
-  `Broker`.
+  date. Takes an optional `transaction_cost` and the three `max_..._per_...`
+  risk limits (see `broker.py` above), all defaulting to `Broker`'s own
+  defaults and forwarded straight to it.
 
 ## `marketdata/`
 
