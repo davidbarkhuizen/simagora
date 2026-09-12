@@ -32,8 +32,28 @@ def _decimal_or_default(row, index, default=0):
   except Exception:
     return default
 
+def _adjustment_ratio(close, adj_close):
+  '''
+  adj_close / close - the split/dividend adjustment factor applied
+  uniformly to a bar's open/high/low, so a strategy switching its price
+  field to the adjusted series gets an internally consistent bar rather
+  than one adjusted field (adj_close) mixed with three raw ones.
+  1 (no adjustment) if either is non-positive: adj_close defaults to 0
+  when a CSV row doesn't carry it at all (see _decimal_or_default), and
+  a zero ratio would collapse open/high/low to 0 too rather than
+  leaving a bar with no real adjustment data unadjusted.
+  '''
+  if (close <= 0) or (adj_close <= 0):
+    return Decimal(1)
+  return adj_close / close
+
 def row_to_dict(row):
-  '''return dict with keys [date, open, high, low, close, volume, adj_close]'''
+  '''
+  return dict with keys [date, open, high, low, close, volume,
+  adj_close, adj_open, adj_high, adj_low] - the adj_* OHLC fields
+  (besides adj_close itself) are derived via _adjustment_ratio, not
+  read from the CSV row
+  '''
   date = parse_string_to_date(row[0])
   if (date == None):
     return None
@@ -46,7 +66,13 @@ def row_to_dict(row):
   volume = _decimal_or_default(row, 5)
   adj_close = _decimal_or_default(row, 6)
 
-  return {'date' : date, 'open' : open, 'high' : high, 'low' : low, 'close' : close, 'adj_close' : adj_close, 'volume' : volume }
+  ratio = _adjustment_ratio(close, adj_close)
+
+  return {
+    'date': date, 'open': open, 'high': high, 'low': low, 'close': close,
+    'adj_close': adj_close, 'volume': volume,
+    'adj_open': open * ratio, 'adj_high': high * ratio, 'adj_low': low * ratio,
+  }
 
 def load_csv_data_rows(path_to_csv):
   '''load specified csv file, return list of rows (including header row, if any)'''

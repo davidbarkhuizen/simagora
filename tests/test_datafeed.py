@@ -132,5 +132,43 @@ class TestDataFeed(unittest.TestCase):
     self.assertEqual(dates, [date(2010, 1, 1)])
 
 
+class TestDataFeedAdjustedOHLC(unittest.TestCase):
+  '''
+  adj_open/adj_high/adj_low are derived at CSV-load time (see
+  csvhandler.row_to_dict) - this confirms they're reachable through
+  DataFeed's existing generic field-name methods with no DataFeed
+  changes needed, the same way adj_close already was
+  '''
+
+  def setUp(self):
+    rows = [
+      # adj_close(90) is 90% of close(100) - a 10% split/dividend adjustment
+      ('2010-01-01', '100', '110', '90', '100', '1000', '90'),
+      ('2010-01-02', '102', '112', '92', '102', '1000', '91.8'),
+    ]
+    fd, self.path = tempfile.mkstemp(suffix='.csv')
+    with os.fdopen(fd, 'w', newline='') as f:
+      f.write('date,open,high,low,close,volume,adj_close\n')
+      for row in rows:
+        f.write(','.join(row) + '\n')
+
+    self.data_root = os.path.dirname(self.path)
+    self.instrument = os.path.splitext(os.path.basename(self.path))[0]
+    self.datafeed = DataFeed(self.instrument, data_root=self.data_root)
+
+  def tearDown(self):
+    os.remove(self.path)
+
+  def test_get_price_reaches_the_derived_adjusted_fields(self):
+    self.assertEqual(self.datafeed.get_price(self.instrument, date(2010, 1, 1), 'adj_open'), Decimal('90'))
+    self.assertEqual(self.datafeed.get_price(self.instrument, date(2010, 1, 1), 'adj_high'), Decimal('99'))
+    self.assertEqual(self.datafeed.get_price(self.instrument, date(2010, 1, 1), 'adj_low'), Decimal('81'))
+
+  def test_n_day_high_works_off_an_adjusted_field_like_any_other(self):
+    # day1's adj_high = 110 * 0.9 = 99; n_day_high excludes date's own bar
+    high = self.datafeed.n_day_high(self.instrument, date(2010, 1, 2), 'adj_high', 1)
+    self.assertEqual(high, Decimal('99'))
+
+
 if __name__ == '__main__':
   unittest.main()
