@@ -10,6 +10,7 @@ from . import stats
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
+import os
 
 def progress_tracking_bounds(start_date, end_date):
   '''
@@ -259,5 +260,6 @@ class Simulator(object):
     ax.grid(False)
     fig.autofmt_xdate(rotation=90)
     
+    os.makedirs('plot', exist_ok=True)
     fname = 'plot/plot_' + self.time_stamp
     fig.savefig(fname) 

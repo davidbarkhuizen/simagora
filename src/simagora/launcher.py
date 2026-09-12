@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import *
 from time import perf_counter as clock
 from decimal import Decimal
@@ -13,8 +14,9 @@ class Launcher(object):
   def setup_logging(self):
     t = datetime.now()
     self.tstamp = '%d-%d-%d-%d-%d' % (t.year, t.month, t.day, t.hour, t.minute)
-    fname = LOG_FILE_PATH + LOG_FILENAME + self.tstamp + '.log'    
-    logging.basicConfig(filename=fname,level=logging.INFO,format=FORMAT)  
+    os.makedirs(LOG_FILE_PATH, exist_ok=True)
+    fname = LOG_FILE_PATH + LOG_FILENAME + self.tstamp + '.log'
+    logging.basicConfig(filename=fname,level=logging.INFO,format=FORMAT)
   
   def configure(self, p):
     print('constructing simulator')
