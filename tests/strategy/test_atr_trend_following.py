@@ -8,11 +8,10 @@ aren't re-tested here
 
 import unittest
 from decimal import Decimal
-from datetime import timedelta
 
 from simagora.engine.strategy import ATRTrendFollowingStrategy
 
-from testutil import FakeDataFeed, DAY1, make_trader_with_strategy, submitted_orders
+from testutil import FakeDataFeed, DAY1, make_flat_range_prices, make_trader_with_strategy, submitted_orders
 
 
 class _ShortLookbackATRTrendFollowing(ATRTrendFollowingStrategy):
@@ -29,12 +28,8 @@ class TestATRTrendFollowingStrategy(unittest.TestCase):
   RANGE_CLOSE = Decimal('100')
 
   def make_trader_with_breakout(self, breakout_prices, strategy_class=_ShortLookbackATRTrendFollowing):
-    prices = {}
-    d = DAY1
-    for i in range(self.ENTRY_WINDOW):
-      prices[d] = {'high': self.RANGE_HIGH, 'low': self.RANGE_LOW, 'close': self.RANGE_CLOSE}
-      d = d + timedelta(days=1)
-    breakout_date = d
+    prices, breakout_date = make_flat_range_prices(
+      self.ENTRY_WINDOW, self.RANGE_HIGH, self.RANGE_LOW, self.RANGE_CLOSE)
     prices[breakout_date] = breakout_prices
 
     datafeed = FakeDataFeed(prices)
