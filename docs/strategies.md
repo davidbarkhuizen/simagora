@@ -10,7 +10,17 @@ Selected by the `strat` list passed to `Launcher()`/`Simulator()` (see
   closing price is above/below the 20-day moving average of daily highs, with fixed
   0.5%/1% stop-loss/take-profit bands. On each new same-direction signal, it also
   submits `CloseOrder`s for any of its own open positions, in that direction, that
-  are currently in the money (see [Position closing](position-closing.md)).
+  are currently in the money (see [Position closing](position-closing.md)). Built on
+  `MovingAverageCrossoverBase`, shared with `DualMovingAverageCrossoverStrategy` below.
+- **`'dualmacrossover'`** — `DualMovingAverageCrossoverStrategy`, the classic "golden
+  cross"/"death cross": buy when the `fast_window_days` (default 50) moving average
+  of closes crosses above the `slow_window_days` (default 200) moving average, sell
+  when it crosses below — the standard textbook counterpart to `MovingAverageCrossoverStrategy`'s
+  single-moving-average-vs-price version, sharing the same `MovingAverageCrossoverBase`
+  for stop-loss/take-profit/close-in-the-money mechanics. Uses much wider 5%/10%
+  bands than its sibling's 0.5%/1%, since a 50/200-day signal moves far more slowly
+  than a 20-day one — the tighter bands sized for that faster signal would otherwise
+  stop most positions out long before a multi-month trend plays out.
 - **`'trend'`** — `TrendFollowingStrategy`. A Donchian-channel breakout: buy when
   the close breaks above the high of the preceding 20 days, sell when it breaks
   below their low. Stop-loss sits at the shorter 10-day low/high (the classic
@@ -97,8 +107,9 @@ default, so a typo doesn't quietly run the wrong strategy; `None` (what every
 `Trader`-constructing test in this repo passes, since they don't care which
 strategy loads) resolves to `'movavg'`.
 
-The first three strategies above and `DollarCostAveragingStrategy` are
-single-instrument (`SingleInstrumentStrategy` reads `trader.instrument`);
+`MovingAverageCrossoverStrategy`, `DualMovingAverageCrossoverStrategy`,
+`TrendFollowingStrategy`, `MeanReversionStrategy`, and `DollarCostAveragingStrategy`
+are single-instrument (`SingleInstrumentStrategy` reads `trader.instrument`);
 `DualMomentumStrategy`, `CrossSectionalMomentumStrategy`, `LowVolatilityStrategy`,
 and `PairsTradingStrategy` are multi-instrument — see
 [Multi-instrument support](multi-instrument.md) for the plumbing they're built on.

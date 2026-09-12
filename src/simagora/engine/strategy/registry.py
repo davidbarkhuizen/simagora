@@ -1,4 +1,5 @@
 from .moving_average_crossover import MovingAverageCrossoverStrategy
+from .dual_moving_average_crossover import DualMovingAverageCrossoverStrategy
 from .trend_following import TrendFollowingStrategy
 from .mean_reversion import MeanReversionStrategy
 from .dual_momentum import DualMomentumStrategy
@@ -9,6 +10,7 @@ from .pairs_trading import PairsTradingStrategy
 
 STRATEGY_REGISTRY = {
   'movavg': MovingAverageCrossoverStrategy,
+  'dualmacrossover': DualMovingAverageCrossoverStrategy,
   'trend': TrendFollowingStrategy,
   'meanreversion': MeanReversionStrategy,
   'dualmomentum': DualMomentumStrategy,
