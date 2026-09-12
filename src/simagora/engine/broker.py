@@ -122,10 +122,10 @@ class Broker(object):
   def manage_open_positions(self, date):
     '''
     for all positions in self.open_positions
-    close on - take profit, stop loss, position expired
+    close on - stop loss, take profit, position expired
     '''
     idx = len(self.open_positions) - 1
-    while ((idx >= 0) and (len(self.open_positions) > 0)):        
+    while ((idx >= 0) and (len(self.open_positions) > 0)):
       pos = self.open_positions[idx]
       ins = pos.order_receipt.order.ins
       pdata = self.datafeed.get_price_info(ins, date)
@@ -137,9 +137,14 @@ class Broker(object):
         # with a multi-instrument Universe whose instruments don't all
         # share the same trading calendar; leave the position alone
         # today rather than crash on a missing high/low/close)
-        if (self.profit_taken_on_position(date, pos, pdata) == True):
+        #
+        # stop-loss is checked before take-profit: if a single day's
+        # high/low range spans both levels, we can't know which was
+        # actually hit first intraday, so we assume the pessimistic
+        # (loss-taking) outcome rather than the optimistic one
+        if (self.loss_taken_on_position(date, pos, pdata) == True):
           pos_closed = True
-        elif (self.loss_taken_on_position(date, pos, pdata) == True):
+        elif (self.profit_taken_on_position(date, pos, pdata) == True):
           pos_closed = True
         elif (self.position_expired(pos, pdata, date) == True):
           pos_closed = True
