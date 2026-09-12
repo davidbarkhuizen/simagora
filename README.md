@@ -87,7 +87,9 @@ to be run from the repo root.
   bands), and n-day return (the fractional change in a price field between a date
   and n trading days before it - a point-in-time lookback, unlike the other
   `n_day_*` methods which are all window aggregates). See Data below for where it
-  reads from.
+  reads from. `get_price`/`get_price_info`/`date_is_trading_day` all resolve
+  through the same `_index_of(date)` scan the `n_day_*` helpers already use,
+  rather than each re-scanning `self.feed` for a matching date on its own.
 - `universe.py` — `Universe`, a multi-instrument sibling of `DataFeed`: one
   `DataFeed` per instrument, dispatched by the `instrument` argument every method
   above already accepts but a plain `DataFeed` ignores (it only ever tracks one).

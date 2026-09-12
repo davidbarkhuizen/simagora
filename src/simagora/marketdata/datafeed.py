@@ -92,17 +92,13 @@ class DataFeed(object):
     return (today_value - past_value) / past_value
 
   def get_price(self, instrument, date, price):
-    for i in self.feed:
-     if (i['date'] == date):
-       return i[price]
-    return None  
+    info = self.get_price_info(instrument, date)
+    return info[price] if (info is not None) else None
 
   def get_price_info(self, instrument, date):
-    for i in self.feed:
-     if (i['date'] == date):
-       return i
-    return None
-  
+    i = self._index_of(date)
+    return self.feed[i] if (i >= 0) else None
+
   def subscribe_to_price_feed_for_instrument(self, instrument):
     file_name = os.path.join(self.data_root, instrument + '.csv')
     
@@ -114,8 +110,5 @@ class DataFeed(object):
     sorted_dicts = sorted(dicts, key=lambda k: k['date'])    
     self.feed = sorted_dicts
 
-  def date_is_trading_day(self, d):    
-    for day in self.feed:
-      if (day['date'] == d):
-        return True
-    return False
+  def date_is_trading_day(self, d):
+    return (self._index_of(d) != -1)
