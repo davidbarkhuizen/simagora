@@ -225,7 +225,8 @@ was handed.
   - `Broker.execute_orders_to_open`/`execute_orders_to_close` reject with a new
     `'instrument_not_trading'` receipt status (same pattern as the existing
     `'gapped_through_stop_loss'`/`'insufficient_cash_bal'`) instead of crashing on
-    `calc_execution_price` returning `None`.
+    `calc_execution_price` returning `None`. Both methods share this rejection
+    through a private `_calc_execution_price_or_reject()`, since either can hit it.
   - `Broker.manage_open_positions` simply leaves a position alone for the day if
     its instrument has no data, rather than checking take-profit/stop-loss/expiry
     against a missing high/low/close.
