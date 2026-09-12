@@ -3,12 +3,9 @@
 import unittest
 from decimal import Decimal
 
-from simagora.domain.order import Order
-from simagora.domain.orderreceipt import OrderReceipt
-from simagora.domain.position import Position
 from simagora.engine.strategy import ValueAveragingStrategy
 
-from testutil import FakeDataFeed, DAY1, make_trader_with_strategy, submitted_orders
+from testutil import FakeDataFeed, DAY1, make_trader_with_strategy, submitted_orders, make_manual_position
 
 
 class _ShortIntervalVA(ValueAveragingStrategy):
@@ -21,16 +18,6 @@ class TestValueAveragingStrategy(unittest.TestCase):
   def make_trader(self, close_price):
     datafeed = FakeDataFeed({DAY1: {'high': close_price + 5, 'low': close_price - 5, 'close': close_price}})
     return make_trader_with_strategy(datafeed, _ShortIntervalVA, DAY1, DAY1, opening_bal=Decimal('100000'))
-
-  def make_position(self, broker, trader, quantity, execution_price):
-    '''like make_manual_position, but with a configurable quantity - VA's sizing is the whole point of the strategy'''
-    order = Order('s&p500', 'buy', quantity, None, None, DAY1)
-    order.trader_id = trader.id
-    receipt = OrderReceipt(order, 'opened', execution_price, DAY1, Decimal('0'))
-    pos = Position(receipt)
-    broker.open_positions.append(pos)
-    broker.positions[pos.id] = pos
-    return pos
 
   def test_first_period_buys_enough_to_reach_one_deposit(self):
     orderQ, broker, trader = self.make_trader(Decimal('100'))
@@ -47,7 +34,8 @@ class TestValueAveragingStrategy(unittest.TestCase):
 
   def test_buys_more_after_a_price_drop_to_close_the_larger_gap(self):
     orderQ, broker, trader = self.make_trader(Decimal('50'))
-    self.make_position(broker, trader, Decimal('10'), Decimal('100'))
+    make_manual_position(broker, trader, 's&p500', execution_price=Decimal('100'),
+                          quantity=Decimal('10'), stop_loss=None, take_profit=None)
     trader.strategy.trading_days_seen = 3  # the 2nd investment period
 
     trader.execute_strategy(DAY1)
@@ -59,7 +47,8 @@ class TestValueAveragingStrategy(unittest.TestCase):
 
   def test_skips_the_purchase_when_the_position_already_meets_the_target(self):
     orderQ, broker, trader = self.make_trader(Decimal('250'))
-    self.make_position(broker, trader, Decimal('10'), Decimal('100'))
+    make_manual_position(broker, trader, 's&p500', execution_price=Decimal('100'),
+                          quantity=Decimal('10'), stop_loss=None, take_profit=None)
     trader.strategy.trading_days_seen = 3  # the 2nd investment period
 
     trader.execute_strategy(DAY1)

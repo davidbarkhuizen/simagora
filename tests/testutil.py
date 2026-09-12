@@ -253,16 +253,20 @@ def open_position(trader, broker, day, buysell='buy', quantity=1,
   return broker.open_positions[-1]
 
 
-def make_manual_position(broker, trader, ins, buysell='buy', execution_price=Decimal('100')):
+def make_manual_position(broker, trader, ins, buysell='buy', execution_price=Decimal('100'),
+                          quantity=Decimal(1), stop_loss=Decimal('1'), take_profit=Decimal('1000')):
   '''
   build a Position directly and append it to broker's open_positions,
   bypassing execute_orders_to_open's cash/margin bookkeeping entirely -
   for tests that need to inject an already-open position (at a precise
-  execution price, or owned by a specific trader) without caring about
-  the order's own stop_loss/take_profit, which are arbitrary
-  placeholder values here, never read by any test using this helper
+  execution price/quantity, or owned by a specific trader). quantity/
+  stop_loss/take_profit default to arbitrary placeholder values, never
+  read by most tests using this helper, but overridable for the ones
+  that do care (e.g. a strategy checking a pre-existing position's own
+  stop_loss level, or a buy-only strategy whose orders always carry
+  stop_loss=None/take_profit=None)
   '''
-  order = Order(ins, buysell, 1, Decimal('1'), Decimal('1000'), DAY1)
+  order = Order(ins, buysell, quantity, stop_loss, take_profit, DAY1)
   order.trader_id = trader.id
   receipt = OrderReceipt(order, 'opened', execution_price, DAY1, Decimal('0'))
   pos = Position(receipt)
