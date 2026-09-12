@@ -71,15 +71,12 @@ not re-litigated:
 ## 3. Natural extensions
 
 Reasonable next capabilities that fit the existing architecture without a
-rewrite:
-
-- **Nothing surfaces `engine/stats.py`'s metrics in a real run.**
-  `Account.equity(date)`/`equity_curve()`/`trade_pnls()` and `stats.py`'s
-  `total_return`/`cagr`/`max_drawdown`/`sharpe_ratio`/`win_rate`/
-  `average_win`/`average_loss` are all pure library calls - nothing in
-  `Simulator`/`Launcher` invokes them. `Simulator.plot()` remains the only
-  actual reporting surface, and it's still just a matplotlib PNG plus a
-  couple of `logging.info` lines.
+rewrite - none outstanding right now; `Simulator.report_performance()`
+(called from `Launcher.report()`) now logs/prints `stats.py`'s
+`total_return`/`cagr`/`max_drawdown`/`sharpe_ratio`/`win_rate`/
+`average_win`/`average_loss` for every trader off its own
+`trader.ac.equity_curve()`/`trader.ac.trade_pnls()`, alongside
+`Simulator.plot()`'s matplotlib PNG.
 
 ## 4. Genuine engine-level edge cases worth flagging
 
@@ -104,12 +101,13 @@ rewrite:
 
 ## Biggest bang-for-buck
 
-Surface `engine/stats.py`'s metrics in a real run (§3) — right now
-`total_return`/`cagr`/`max_drawdown`/`sharpe_ratio`/`win_rate`/
-`average_win`/`average_loss` are pure library calls nothing in
-`Simulator`/`Launcher` invokes; `Simulator.plot()` remains a matplotlib PNG
-plus a couple of `logging.info` lines. Computing them off
-`trader.ac.equity_curve()`/`trader.ac.trade_pnls()` and logging/printing
-the result at the end of a run (e.g. from `Launcher.report()`) is additive,
-touches no existing logic, and finally makes every one of those already-built
-metrics visible from an actual backtest instead of only from its own test suite.
+Extend transaction-cost modeling to stop-loss/take-profit/expiry exits
+(§1) — `Broker.calc_execution_price`'s `transaction_cost` machinery
+already exists and is applied to every open and explicit-close fill, but
+stop-loss/take-profit/expiry exits still bypass it entirely, filling at
+their literal trigger level or the day's raw close. Since the cost model
+and the places `Account` books those three exit kinds are both already in
+hand, applying the existing per-unit cost consistently to their exit
+prices too is a scoped, additive change (no new cost model to design) that
+closes the most visible remaining gap between "every fill pays the
+configured cost" and what the engine actually does today.

@@ -40,6 +40,7 @@ class Launcher(object):
 
   def report(self):
     self._timed('plotting', 'plot', self.sim.plot)
+    self._timed('computing performance stats', 'stats', self.sim.report_performance)
 
   def go(self, p):
     self.setup_logging()
