@@ -66,6 +66,26 @@ Selected by the `strat` list passed to `Launcher()`/`Simulator()` (see
   fixed share quantity rather than a fixed dollar amount, like every strategy
   above — an order submitted today executes at tomorrow's price (see
   [Overview](overview.md)), which isn't known yet at submission time.
+- **`'pairstrading'`** — `PairsTradingStrategy`, also a `MultiInstrumentStrategy`,
+  but trades a fixed pair rather than ranking the whole universe: the first two
+  instruments of `trader.universe` (`self.instrument_a`/`self.instrument_b`).
+  Tracks the z-score of their price spread (`Universe.spread`) against its own
+  trailing 20-day mean/std-dev — the same moving-average/std-dev shape
+  `MeanReversionStrategy` uses on a single price series, applied to the spread
+  between two instruments instead. Opens a pair position once the spread has
+  drifted `entry_z_score` (default 2) standard deviations from its own mean —
+  short whichever leg has gotten relatively rich, long whichever has gotten
+  relatively cheap, one unit each — and closes both legs together once it has
+  reverted back within `exit_z_score` (default 0.5) of it. Only one pair
+  position is held at a time; a fresh entry signal while one is already open is
+  ignored. A window with zero variance (every trailing spread value, today's own
+  included, already equal to the mean) is treated as fully reverted for an
+  already-open pair - the limiting case of a zero z-score - but as no signal at
+  all for a fresh entry, since there's nothing to score one against. Sized as a
+  single unit of each leg rather than a dollar/beta-neutral hedge ratio - true
+  market-neutral sizing needs a rolling beta calculation this strategy doesn't
+  attempt, so this is a directionally market-neutral approximation, not a
+  precisely dollar-neutral one.
 
 An unrecognized name raises `ValueError` rather than silently falling back to a
 default, so a typo doesn't quietly run the wrong strategy; `None` (what every
@@ -74,6 +94,6 @@ strategy loads) resolves to `'movavg'`.
 
 The first three strategies above and `DollarCostAveragingStrategy` are
 single-instrument (`SingleInstrumentStrategy` reads `trader.instrument`);
-`DualMomentumStrategy`, `CrossSectionalMomentumStrategy`, and
-`LowVolatilityStrategy` are multi-instrument — see
+`DualMomentumStrategy`, `CrossSectionalMomentumStrategy`, `LowVolatilityStrategy`,
+and `PairsTradingStrategy` are multi-instrument — see
 [Multi-instrument support](multi-instrument.md) for the plumbing they're built on.

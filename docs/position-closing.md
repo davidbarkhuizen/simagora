@@ -26,6 +26,8 @@ A position closes the same day one of the following happens, in this order:
    trips (rotating fully to cash). `CrossSectionalMomentumStrategy` submits one
    for each open position whose instrument/direction has fallen out of the
    current top/bottom ranking. `LowVolatilityStrategy` submits one for each open
-   position whose instrument is no longer among the calmest.
+   position whose instrument is no longer among the calmest. `PairsTradingStrategy`
+   submits one for each leg of its pair once their price spread has reverted back
+   toward its own mean.
 
 See [Strategies](strategies.md) for details on each strategy named above.
