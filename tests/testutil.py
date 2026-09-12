@@ -84,6 +84,16 @@ class FakeDataFeed(object):
       return None
     return self.price_info_by_date[dates[idx]][field]
 
+  def trailing_dates(self, d, n, include_current):
+    '''dates for the same trailing window _trailing_values uses, most-recent-first - matches DataFeed.trailing_dates'''
+    dates = sorted(self.price_info_by_date.keys())
+    if (d not in dates):
+      return []
+    idx = dates.index(d)
+    end = idx + 1 if include_current else idx
+    window = dates[max(0, end - n): end]
+    return list(reversed(window))
+
 
 class FakeUniverse(object):
   '''
@@ -118,6 +128,38 @@ class FakeUniverse(object):
 
   def n_day_return(self, instrument, d, field, n):
     return self._feed_for(instrument).n_day_return(instrument, d, field, n)
+
+  def trailing_dates(self, instrument, d, n, include_current):
+    return self._feed_for(instrument).trailing_dates(d, n, include_current)
+
+  def spread(self, instrument_a, instrument_b, d, field):
+    a = self.get_price(instrument_a, d, field)
+    b = self.get_price(instrument_b, d, field)
+    if (a is None) or (b is None):
+      return None
+    return a - b
+
+  def n_day_spread_moving_avg(self, instrument_a, instrument_b, d, field, n):
+    values = self._trailing_spread_values(instrument_a, instrument_b, d, field, n)
+    if (len(values) == 0):
+      return None
+    return sum(values) / Decimal(len(values))
+
+  def n_day_spread_std_dev(self, instrument_a, instrument_b, d, field, n):
+    values = self._trailing_spread_values(instrument_a, instrument_b, d, field, n)
+    if (len(values) == 0):
+      return None
+    mean = sum(values) / Decimal(len(values))
+    variance = sum((v - mean) ** 2 for v in values) / Decimal(len(values))
+    return variance.sqrt()
+
+  def _trailing_spread_values(self, instrument_a, instrument_b, d, field, n):
+    values = []
+    for dd in self.trailing_dates(instrument_a, d, n, include_current=True):
+      s = self.spread(instrument_a, instrument_b, dd, field)
+      if (s is not None):
+        values.append(s)
+    return values
 
   def date_is_trading_day(self, d):
     return any(feed.get_price_info(None, d) is not None for feed in self.feeds.values())

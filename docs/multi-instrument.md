@@ -42,21 +42,31 @@ counterpart used when a strategy trades across more than one.
   open positions calls this rather than reaching into `self.trader.broker`
   directly), and `log_self()`. It's split into `SingleInstrumentStrategy` (sets
   `self.instrument = trader.instrument`) and `MultiInstrumentStrategy` (sets
-  `self.universe = trader.universe`); the first three concrete strategies in
-  [Strategies](strategies.md) inherit from `SingleInstrumentStrategy`, the rest
-  from `MultiInstrumentStrategy`. `DataFeed`/`Universe`'s
+  `self.universe = trader.universe`); see [Strategies](strategies.md) for which
+  concrete strategy inherits from which. `DataFeed`/`Universe`'s
   `n_day_return(instrument, date, price, n)` gives a multi-instrument strategy the
   point-in-time lookback return it needs (e.g. to rank instruments by momentum)
   that the other `n_day_*` window aggregates don't provide.
 - **`DualMomentumStrategy`, `CrossSectionalMomentumStrategy`, and
-  `LowVolatilityStrategy`** (see [Strategies](strategies.md)) are the concrete
-  multi-instrument strategies, each ranking `self.universe` by a metric
-  (`n_day_return` for the first two, `n_day_std_dev` for the third) and
-  reconciling currently-open positions against that ranking.
-- **Shared ranking/rotation plumbing lives on `MultiInstrumentStrategy` itself.**
+  `LowVolatilityStrategy`** (see [Strategies](strategies.md)) rank `self.universe`
+  by a metric (`n_day_return` for the first two, `n_day_std_dev` for the third)
+  and reconcile currently-open positions against that ranking.
+  **`PairsTradingStrategy`** is built on the same base but doesn't rank a
+  universe at all - it trades a fixed pair (`self.universe`'s first two
+  instruments) against `Universe.spread`/`n_day_spread_moving_avg`/
+  `n_day_spread_std_dev` (see below) instead.
+- **Shared plumbing lives on `MultiInstrumentStrategy` itself.**
   `rank_universe(metric_fn)` ({instrument: metric_fn(instrument)}, dropping
-  instruments `metric_fn` returns `None` for), `open_positions_by(key_fn,
+  instruments `metric_fn` returns `None` for - used by the three ranking
+  strategies above, not by `PairsTradingStrategy`), `open_positions_by(key_fn,
   filter_fn=None)` (groups `BaseStrategy.open_positions()` by instrument, by
-  `(instrument, buysell)`, or otherwise, optionally filtered), and
-  `close_positions(positions, date)`. Each concrete strategy's `execute()` just
-  supplies its own metric and grouping key.
+  `(instrument, buysell)`, or otherwise, optionally filtered - every concrete
+  multi-instrument strategy uses this one), and `close_positions(positions,
+  date)` (ditto).
+- **`Universe.spread`/`n_day_spread_moving_avg`/`n_day_spread_std_dev`** give a
+  strategy the rolling mean/std-dev of the price *difference* between two
+  instruments - the same moving-average/std-dev shape `MeanReversionStrategy`
+  already uses on a single price series (see [Strategies](strategies.md)),
+  applied to a spread instead. Built on `DataFeed.trailing_dates()`, which walks
+  one instrument's own trading calendar; a day the other leg has no data for is
+  dropped from the window rather than shifting it further back to compensate.
