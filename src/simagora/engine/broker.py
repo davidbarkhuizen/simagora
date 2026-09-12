@@ -97,6 +97,43 @@ class Broker(object):
     '''
     return [x for x in self.open_positions if (x.order_receipt.order.trader_id == trader_id)]
 
+  def tighten_stop_loss(self, position, new_stop_loss):
+    '''
+    move an already-open position's stop_loss to new_stop_loss, in
+    place - the missing "in-place stop_loss update mechanism" noted in
+    docs/engine-review.md (ATRTrendFollowingStrategy's docstring),
+    needed for chandelier-style trailing stops. Only ever allowed to
+    move in the risk-reducing direction relative to the position's
+    CURRENT stop_loss - up for a long, down for a short - never past
+    it, and never the reverse. Never requires recalculating margin:
+    margin was reserved at order-open time to cover exactly the
+    exec-price-to-(then-current)-stop_loss loss, and moving the stop
+    only ever shrinks that gap (or turns it into a locked-in profit,
+    once it crosses the position's own execution price), never grows it.
+
+    Returns True if the new level was applied, False if it was
+    rejected: the position isn't open, has no stop_loss to begin with
+    (a fully-collateralized order - adding one now would need the
+    margin it was never reserved with), or new_stop_loss doesn't
+    actually move in the risk-reducing direction (looser than, or
+    equal to, the current level). A no-op rather than an exception,
+    since a strategy recomputing a trailing level every day will
+    routinely propose one that hasn't moved.
+    '''
+    if (position not in self.open_positions):
+      return False
+
+    order = position.order_receipt.order
+    if (order.stop_loss is None):
+      return False
+
+    tightens = (new_stop_loss > order.stop_loss) if (order.buysell == 'buy') else (new_stop_loss < order.stop_loss)
+    if not tightens:
+      return False
+
+    order.stop_loss = new_stop_loss
+    return True
+
   def _exceeds_max_open_positions_per_trader(self, order):
     '''True if opening order would put its trader over max_open_positions_per_trader (no limit if None)'''
     if (self.max_open_positions_per_trader is None):

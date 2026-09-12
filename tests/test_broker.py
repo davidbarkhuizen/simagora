@@ -703,6 +703,118 @@ class TestStopLossSlippage(unittest.TestCase):
     self.assertEqual(trader.ac.net_booked_position, Decimal('-10'))
 
 
+class TestTightenStopLoss(unittest.TestCase):
+  '''
+  Broker.tighten_stop_loss - the missing in-place stop_loss update
+  mechanism (see docs/engine-review.md), needed for chandelier-style
+  trailing stops
+  '''
+
+  def test_tightens_a_long_stop_upward(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+    pos = open_position(trader, broker, DAY1)  # stop_loss = 90
+
+    applied = broker.tighten_stop_loss(pos, Decimal('95'))
+
+    self.assertTrue(applied)
+    self.assertEqual(pos.order_receipt.order.stop_loss, Decimal('95'))
+
+  def test_tightens_a_short_stop_downward(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+    pos = open_position(trader, broker, DAY1, buysell='sell', stop_loss=Decimal('110'), take_profit=Decimal('90'))
+
+    applied = broker.tighten_stop_loss(pos, Decimal('105'))
+
+    self.assertTrue(applied)
+    self.assertEqual(pos.order_receipt.order.stop_loss, Decimal('105'))
+
+  def test_rejects_loosening_a_long_stop(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+    pos = open_position(trader, broker, DAY1)  # stop_loss = 90
+
+    applied = broker.tighten_stop_loss(pos, Decimal('85'))
+
+    self.assertFalse(applied)
+    self.assertEqual(pos.order_receipt.order.stop_loss, Decimal('90'))
+
+  def test_rejects_loosening_a_short_stop(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+    pos = open_position(trader, broker, DAY1, buysell='sell', stop_loss=Decimal('110'), take_profit=Decimal('90'))
+
+    applied = broker.tighten_stop_loss(pos, Decimal('115'))
+
+    self.assertFalse(applied)
+    self.assertEqual(pos.order_receipt.order.stop_loss, Decimal('110'))
+
+  def test_rejects_the_exact_same_level_as_a_no_op(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+    pos = open_position(trader, broker, DAY1)  # stop_loss = 90
+
+    applied = broker.tighten_stop_loss(pos, Decimal('90'))
+
+    self.assertFalse(applied)
+
+  def test_rejects_a_position_with_no_stop_loss(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+    pos = open_position(trader, broker, DAY1, stop_loss=None, take_profit=None)
+
+    applied = broker.tighten_stop_loss(pos, Decimal('95'))
+
+    self.assertFalse(applied)
+    self.assertIsNone(pos.order_receipt.order.stop_loss)
+
+  def test_rejects_a_position_that_is_no_longer_open(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('115'), 'low': Decimal('105'), 'close': Decimal('110')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+    pos = open_position(trader, broker, DAY1)
+
+    close_order = CloseOrder(pos.id, DAY2)
+    trader.submit_order(close_order)
+    broker.execute_orders_to_close(DAY2)
+    self.assertNotIn(pos, broker.open_positions)
+
+    applied = broker.tighten_stop_loss(pos, Decimal('95'))
+
+    self.assertFalse(applied)
+
+  def test_a_tightened_stop_actually_triggers_at_the_new_level(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      # touches the tightened stop_loss(95) exactly, without gapping
+      # past it - wouldn't trigger the original stop_loss(90) at all
+      DAY2: {'high': Decimal('98'), 'low': Decimal('95'), 'close': Decimal('96')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+    pos = open_position(trader, broker, DAY1)  # stop_loss = 90
+
+    applied = broker.tighten_stop_loss(pos, Decimal('95'))
+    self.assertTrue(applied)
+
+    broker.manage_open_positions(DAY2)
+
+    self.assertNotIn(pos, broker.open_positions)
+    self.assertIn(pos, broker.closed_positions)
+    self.assertEqual(pos.term_notice.reason, 'stop_loss')
+    self.assertEqual(pos.term_notice.term_price, Decimal('95'))
+
+
 class TestNoStopLossPositions(unittest.TestCase):
   '''a position opened with stop_loss=None is fully-collateralized and never auto-closes on loss'''
 
