@@ -49,17 +49,20 @@ to be run from the repo root.
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
   being silently discarded.
-- `strategy/` — a package: eleven strategies, one per file, all sharing
+- `strategy/` — a package: twelve strategies, one per file, all sharing
   `strategy_base.py`'s `BaseStrategy` for trader/datafeed wiring, order
   submission, and `log_self()` (which now logs the concrete strategy's own
   file, via `inspect.getfile()`, rather than one shared module); split into
   `SingleInstrumentStrategy`/`MultiInstrumentStrategy` for what instrument(s)
-  they trade (see [Multi-instrument support](multi-instrument.md)). Three
+  they trade (see [Multi-instrument support](multi-instrument.md)). Four
   further pairs each share their own base for mechanics that differ only in
   what feeds the signal: `MovingAverageCrossoverStrategy`/
   `DualMovingAverageCrossoverStrategy` share `moving_average_crossover_base.py`'s
   `MovingAverageCrossoverBase` (differing in what "fast"/"slow" values they
-  cross); `MeanReversionStrategy`/`RSIMeanReversionStrategy` share
+  cross); `TrendFollowingStrategy`/`ATRTrendFollowingStrategy` share
+  `trend_following_base.py`'s `TrendFollowingBase` (a second, shorter Donchian
+  channel vs an ATR multiple deciding where the initial stop sits);
+  `MeanReversionStrategy`/`RSIMeanReversionStrategy` share
   `mean_reversion_base.py`'s `MeanReversionBase` (Bollinger Bands vs RSI
   deciding oversold/overbought); `DollarCostAveragingStrategy`/
   `ValueAveragingStrategy` share `periodic_investment_base.py`'s

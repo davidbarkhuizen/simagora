@@ -18,7 +18,9 @@ from .strategy_base import BaseStrategy, SingleInstrumentStrategy, MultiInstrume
 from .moving_average_crossover_base import MovingAverageCrossoverBase
 from .moving_average_crossover import MovingAverageCrossoverStrategy
 from .dual_moving_average_crossover import DualMovingAverageCrossoverStrategy
+from .trend_following_base import TrendFollowingBase
 from .trend_following import TrendFollowingStrategy
+from .atr_trend_following import ATRTrendFollowingStrategy
 from .mean_reversion_base import MeanReversionBase
 from .mean_reversion import MeanReversionStrategy
 from .rsi_mean_reversion import RSIMeanReversionStrategy

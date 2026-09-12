@@ -28,7 +28,19 @@ Selected by the `strat` list passed to `Launcher()`/`Simulator()` (see
   `take_profit` can be `None` — `Broker.profit_taken_on_position` treats that as
   "never triggers"), since trend-following aims to let a winning position run until
   it's stopped out or the trend reverses. A fresh breakout also closes any of the
-  trader's own open positions in the *opposite* direction.
+  trader's own open positions in the *opposite* direction. Built on
+  `TrendFollowingBase`, shared with `ATRTrendFollowingStrategy` below.
+- **`'atrtrend'`** — `ATRTrendFollowingStrategy`, sharing the same
+  `TrendFollowingBase` Donchian-channel breakout entry and opposite-direction
+  close mechanics as `TrendFollowingStrategy`, but placing the stop-loss
+  `atr_multiplier` (default 3) average true ranges (`DataFeed.n_day_atr`, over
+  `atr_window_days`, default 14) away from the entry price instead of a second,
+  shorter Donchian channel — the standard "chandelier exit"-style alternative,
+  scaled to how much the instrument is actually moving day to day. A genuine
+  chandelier exit also ratchets the stop as the position moves favorably; this
+  engine has no mechanism to update an already-open position's stop-loss in
+  place, so this variant places the ATR-sized stop once, at entry, and leaves
+  it there for the life of the position.
 - **`'meanreversion'`** — `MeanReversionStrategy`. Bollinger-Band mean reversion:
   buy when the close drops 2 standard deviations below its own 20-day moving
   average (oversold), sell when it rises the same distance above it (overbought),
@@ -129,9 +141,10 @@ default, so a typo doesn't quietly run the wrong strategy; `None` (what every
 strategy loads) resolves to `'movavg'`.
 
 `MovingAverageCrossoverStrategy`, `DualMovingAverageCrossoverStrategy`,
-`TrendFollowingStrategy`, `MeanReversionStrategy`, `RSIMeanReversionStrategy`,
-`DollarCostAveragingStrategy`, and `ValueAveragingStrategy` are single-instrument
-(`SingleInstrumentStrategy` reads `trader.instrument`);
+`TrendFollowingStrategy`, `ATRTrendFollowingStrategy`, `MeanReversionStrategy`,
+`RSIMeanReversionStrategy`, `DollarCostAveragingStrategy`, and
+`ValueAveragingStrategy` are single-instrument (`SingleInstrumentStrategy`
+reads `trader.instrument`);
 `DualMomentumStrategy`, `CrossSectionalMomentumStrategy`, `LowVolatilityStrategy`,
 and `PairsTradingStrategy` are multi-instrument — see
 [Multi-instrument support](multi-instrument.md) for the plumbing they're built on.
