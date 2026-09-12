@@ -8,7 +8,6 @@ src/simagora/
   engine/       simulation mechanics - orchestration and execution
   marketdata/   CSV-backed historical price data access
   launcher.py   entry point (Launcher, main())
-  timer.py      small perf-timing helper (mostly unused, see below)
 tests/
   run_tests.py  discovers and runs every test_*.py file below
   testutil.py   shared test doubles/factories (FakeDataFeed, broker/trader
@@ -85,5 +84,3 @@ to be run from the repo root.
   a call, print/log the elapsed time, and are both just
   `Launcher._timed(announcement, label, fn)` with a different `fn`
   (`self.sim.run`/`self.sim.plot`).
-- `timer.py` — a small perf-timing helper; its one class is entirely commented out,
-  so today this module only re-exports `time.perf_counter` as `clock`.
