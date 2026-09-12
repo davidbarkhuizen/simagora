@@ -5,6 +5,7 @@ from .mean_reversion import MeanReversionStrategy
 from .dual_momentum import DualMomentumStrategy
 from .cross_sectional_momentum import CrossSectionalMomentumStrategy
 from .dollar_cost_averaging import DollarCostAveragingStrategy
+from .value_averaging import ValueAveragingStrategy
 from .low_volatility import LowVolatilityStrategy
 from .pairs_trading import PairsTradingStrategy
 
@@ -17,6 +18,7 @@ STRATEGY_REGISTRY = {
   'crosssectionalmomentum': CrossSectionalMomentumStrategy,
   'lowvolatility': LowVolatilityStrategy,
   'dollarcostaveraging': DollarCostAveragingStrategy,
+  'valueaveraging': ValueAveragingStrategy,
   'pairstrading': PairsTradingStrategy,
 }
 
