@@ -2,11 +2,12 @@
 
 import unittest
 from decimal import Decimal
-from datetime import timedelta
 
 from simagora.engine.strategy import DollarCostAveragingStrategy
 
-from testutil import FakeDataFeed, DAY1, make_trader_with_strategy, submitted_orders
+from testutil import (
+  FakeDataFeed, DAY1, DAY1_PRICES, make_flat_range_prices, make_trader_with_strategy, submitted_orders,
+)
 
 
 class _ShortIntervalDCA(DollarCostAveragingStrategy):
@@ -18,16 +19,11 @@ class TestDollarCostAveragingStrategy(unittest.TestCase):
 
   def make_trader(self, num_days):
     '''num_days flat trading days starting at DAY1; returns (orderQ, dates, trader)'''
-    dates = []
-    prices = {}
-    d = DAY1
-    for i in range(num_days):
-      dates.append(d)
-      prices[d] = {'high': Decimal('105'), 'low': Decimal('95'), 'close': Decimal('100')}
-      d = d + timedelta(days=1)
+    prices, _ = make_flat_range_prices(num_days, DAY1_PRICES['high'], DAY1_PRICES['low'], DAY1_PRICES['close'])
+    dates = sorted(prices.keys())
 
     datafeed = FakeDataFeed(prices)
-    orderQ, broker, trader = make_trader_with_strategy(datafeed, _ShortIntervalDCA, DAY1, dates[-1])
+    orderQ, broker, trader = make_trader_with_strategy(datafeed, _ShortIntervalDCA, dates[0], dates[-1])
     return orderQ, dates, trader
 
   def test_buys_on_the_first_trading_day(self):
