@@ -45,11 +45,53 @@ class SingleInstrumentStrategy(BaseStrategy):
 
 
 class MultiInstrumentStrategy(BaseStrategy):
-  '''a strategy that trades across trader.universe'''
+  '''
+  a strategy that trades across trader.universe. Bundles the plumbing
+  shared by every ranking/rotation strategy below it (DualMomentum,
+  CrossSectionalMomentum, LowVolatility all rank the universe by some
+  metric, then reconcile currently-open positions against whatever
+  that ranking currently wants) so a new one doesn't have to
+  re-implement it.
+  '''
 
   def __init__(self, trader, start_date, end_date):
     BaseStrategy.__init__(self, trader, start_date, end_date)
     self.universe = trader.universe
+
+  def rank_universe(self, metric_fn):
+    '''
+    {instrument: metric_fn(instrument)} for every self.universe
+    instrument metric_fn doesn't return None for - an instrument
+    metric_fn can't yet score (e.g. not enough trailing history) is
+    dropped rather than ranked last, since "no score yet" isn't the
+    same as "worst"
+    '''
+    ranked = {}
+    for ins in self.universe:
+      value = metric_fn(ins)
+      if (value is not None):
+        ranked[ins] = value
+    return ranked
+
+  def open_positions_by(self, key_fn, filter_fn=None):
+    '''
+    {key_fn(order): [positions]} of this trader's own currently open
+    positions, keyed however the caller likes (by instrument, by
+    (instrument, buysell), ...); filter_fn(order), if given, excludes
+    any position it returns False for (e.g. lambda o: o.buysell == 'buy')
+    '''
+    by_key = {}
+    open_positions = self.trader.broker.get_open_positions_for_trader(self.trader.id)
+    for pos in open_positions:
+      order = pos.order_receipt.order
+      if (filter_fn is not None) and (not filter_fn(order)):
+        continue
+      by_key.setdefault(key_fn(order), []).append(pos)
+    return by_key
+
+  def close_positions(self, positions, date):
+    for pos in positions:
+      self.submit_order(CloseOrder(pos.id, date))
 
 
 class MovingAverageCrossoverStrategy(SingleInstrumentStrategy):
@@ -241,37 +283,10 @@ class DualMomentumStrategy(MultiInstrumentStrategy):
   lookback_window_days = 20
   stop_loss_margin = Decimal('0.05')  # 5 %
 
-  def rank_universe(self, date):
-    '''
-    {instrument: n_day_return} for every instrument in self.universe
-    with enough trailing history to have one; an instrument without
-    enough history yet is dropped rather than treated as the worst
-    performer, since "no history yet" isn't the same as "underperformed"
-    '''
-    returns = {}
-    for ins in self.universe:
-      ret = self.datafeed.n_day_return(ins, date, 'close', self.lookback_window_days)
-      if (ret is not None):
-        returns[ins] = ret
-    return returns
-
-  def open_buy_positions_by_instrument(self):
-    '''{instrument: [positions]} of this trader's own currently open buy positions'''
-    by_ins = {}
-    open_positions = self.trader.broker.get_open_positions_for_trader(self.trader.id)
-    for pos in open_positions:
-      order = pos.order_receipt.order
-      if (order.buysell == 'buy'):
-        by_ins.setdefault(order.ins, []).append(pos)
-    return by_ins
-
-  def close_positions(self, positions, date):
-    for pos in positions:
-      self.submit_order(CloseOrder(pos.id, date))
-
   def execute(self, date):
-    returns = self.rank_universe(date)
-    open_by_ins = self.open_buy_positions_by_instrument()
+    returns = self.rank_universe(
+      lambda ins: self.datafeed.n_day_return(ins, date, 'close', self.lookback_window_days))
+    open_by_ins = self.open_positions_by(lambda o: o.ins, lambda o: o.buysell == 'buy')
 
     if (len(returns) == 0):
       # not enough trailing history anywhere yet
@@ -328,30 +343,9 @@ class CrossSectionalMomentumStrategy(MultiInstrumentStrategy):
   bottom_n = 1
   stop_loss_margin = Decimal('0.05')  # 5 %
 
-  def rank_universe(self, date):
-    '''{instrument: n_day_return}, dropping instruments without enough trailing history yet'''
-    returns = {}
-    for ins in self.universe:
-      ret = self.datafeed.n_day_return(ins, date, 'close', self.lookback_window_days)
-      if (ret is not None):
-        returns[ins] = ret
-    return returns
-
-  def open_positions_by_instrument_and_direction(self):
-    '''{(instrument, buysell): [positions]} of this trader's own currently open positions'''
-    by_key = {}
-    open_positions = self.trader.broker.get_open_positions_for_trader(self.trader.id)
-    for pos in open_positions:
-      order = pos.order_receipt.order
-      by_key.setdefault((order.ins, order.buysell), []).append(pos)
-    return by_key
-
-  def close_positions(self, positions, date):
-    for pos in positions:
-      self.submit_order(CloseOrder(pos.id, date))
-
   def execute(self, date):
-    returns = self.rank_universe(date)
+    returns = self.rank_universe(
+      lambda ins: self.datafeed.n_day_return(ins, date, 'close', self.lookback_window_days))
     if (len(returns) == 0):
       # not enough trailing history anywhere yet
       return
@@ -362,7 +356,7 @@ class CrossSectionalMomentumStrategy(MultiInstrumentStrategy):
     shorts -= longs  # guard a universe too small to fill both sides distinctly
 
     desired = set((ins, 'buy') for ins in longs) | set((ins, 'sell') for ins in shorts)
-    open_by_key = self.open_positions_by_instrument_and_direction()
+    open_by_key = self.open_positions_by(lambda o: (o.ins, o.buysell))
 
     # CLOSE POSITIONS THAT FELL OUT OF THE DESIRED SET
     for key, positions in open_by_key.items():
@@ -397,37 +391,15 @@ class LowVolatilityStrategy(MultiInstrumentStrategy):
   top_n = 1
   stop_loss_margin = Decimal('0.05')  # 5 %
 
-  def rank_universe(self, date):
-    '''{instrument: n_day_std_dev}, dropping instruments without enough trailing history yet'''
-    vols = {}
-    for ins in self.universe:
-      std = self.datafeed.n_day_std_dev(ins, date, 'close', self.lookback_window_days)
-      if (std is not None):
-        vols[ins] = std
-    return vols
-
-  def open_buy_positions_by_instrument(self):
-    '''{instrument: [positions]} of this trader's own currently open buy positions'''
-    by_ins = {}
-    open_positions = self.trader.broker.get_open_positions_for_trader(self.trader.id)
-    for pos in open_positions:
-      order = pos.order_receipt.order
-      if (order.buysell == 'buy'):
-        by_ins.setdefault(order.ins, []).append(pos)
-    return by_ins
-
-  def close_positions(self, positions, date):
-    for pos in positions:
-      self.submit_order(CloseOrder(pos.id, date))
-
   def execute(self, date):
-    vols = self.rank_universe(date)
+    vols = self.rank_universe(
+      lambda ins: self.datafeed.n_day_std_dev(ins, date, 'close', self.lookback_window_days))
     if (len(vols) == 0):
       # not enough trailing history anywhere yet
       return
 
     calmest = set(sorted(vols, key=vols.get)[:self.top_n])
-    open_by_ins = self.open_buy_positions_by_instrument()
+    open_by_ins = self.open_positions_by(lambda o: o.ins, lambda o: o.buysell == 'buy')
 
     # CLOSE POSITIONS THAT FELL OUT OF THE CALMEST SET
     for ins, positions in open_by_ins.items():

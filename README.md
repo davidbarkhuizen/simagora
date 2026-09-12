@@ -256,6 +256,16 @@ was handed.
   where the real `DataFeed` gracefully returns no values - unnoticed until a
   strategy called it against a *non-primary* universe instrument with a calendar
   gap, which no earlier test exercised.
+- **Shared ranking/rotation plumbing lives on `MultiInstrumentStrategy` itself.**
+  All three strategies above rank the universe by some metric and then reconcile
+  currently-open positions against whatever that ranking wants, so that plumbing
+  - not each strategy's own copy of it - lives once on the base class:
+  `rank_universe(metric_fn)` ({instrument: metric_fn(instrument)}, dropping
+  instruments `metric_fn` returns `None` for), `open_positions_by(key_fn,
+  filter_fn=None)` (this trader's own open positions grouped however the caller
+  needs - by instrument, by `(instrument, buysell)`, optionally filtered), and
+  `close_positions(positions, date)`. Each concrete strategy's `execute()` just
+  supplies its own metric and grouping key.
 
 ## Position closing
 
