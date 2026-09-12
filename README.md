@@ -105,6 +105,9 @@ to be run from the repo root.
 ### Top level
 
 - `launcher.py` — `Launcher`/`main()`, the intended entry point; see Running below.
+  `simulate()`/`report()` both print an announcement, time a call, print/log the
+  elapsed time, and are both just `Launcher._timed(announcement, label, fn)` with
+  a different `fn` (`self.sim.run`/`self.sim.plot`).
 - `timer.py` — a small perf-timing helper; its one class is entirely commented out,
   so today this module only re-exports `time.perf_counter` as `clock`.
 

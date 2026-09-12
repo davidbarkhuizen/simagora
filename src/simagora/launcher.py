@@ -21,23 +21,22 @@ class Launcher(object):
     self.sim = Simulator(p['ins'], p['strat'], p['start_date'], p['end_date'], p['open_bal'], self.tstamp,
                           universe=p.get('universe'))
 
-  def simulate(self):
-    print('running simulator')
+  def _timed(self, announcement, label, fn):
+    '''run fn(), printing announcement first and the elapsed time after,
+    and logging the same elapsed time labeled (e.g. 'sim time = ...')'''
+    print(announcement)
     start = clock()
-    self.sim.run()
+    fn()
     end = clock()
     dur_str = 'seconds = %f' % (end - start)
     print(dur_str)
-    logging.info('sim time = ' + dur_str)
+    logging.info('%s time = %s' % (label, dur_str))
+
+  def simulate(self):
+    self._timed('running simulator', 'sim', self.sim.run)
 
   def report(self):
-    print('plotting')
-    start = clock()
-    self.sim.plot()
-    end = clock()
-    dur_str = 'seconds = %f' % (end - start)
-    print(dur_str)
-    logging.info('plot time = ' + dur_str)
+    self._timed('plotting', 'plot', self.sim.plot)
 
   def go(self, p):
     self.setup_logging()
