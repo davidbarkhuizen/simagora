@@ -13,9 +13,6 @@ class Order(HasAutoId):
     issue_date,
     expiry_date = None,
     trader_id = None,
-    target_price = None,
-    target_floor = None,
-    target_ceiling = None,
     leverage = Decimal(1)
     ):
     '''
@@ -34,12 +31,6 @@ class Order(HasAutoId):
     self.expiry_date = expiry_date
 
     self.leverage = Decimal(leverage)
-
-    self.target_price = target_price
-    self.target_floor = target_floor
-    self.target_ceiling = target_ceiling    
-    
-    
 
   def __str__(self):
     return (self.ins + ' - ' + self.buysell + ' - ' + str(self.quantity))
