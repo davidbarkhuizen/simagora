@@ -1,5 +1,3 @@
-import logging
-
 from .autoid import HasAutoId
 
 class OrderReceipt(HasAutoId):

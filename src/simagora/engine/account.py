@@ -1,7 +1,6 @@
 from ..domain.termnotice import TermNotice
 from ..domain.autoid import HasAutoId
 from decimal import Decimal
-import logging
 
 def _signed_pdelta(buysell, reference_price, other_price):
   '''
@@ -154,8 +153,7 @@ class Account(HasAutoId):
   def tally_individual_open_positions(self, date):
     '''
     '''
-    for pos in self.broker.get_open_positions_for_trader(self.trader_id):    
-      margin = pos.order_receipt.margin
+    for pos in self.broker.get_open_positions_for_trader(self.trader_id):
       order = pos.order_receipt.order
       receipt = pos.order_receipt    
       
@@ -168,9 +166,8 @@ class Account(HasAutoId):
       if (in_the_money == True):
         profit = pdelta * order.quantity * order.leverage
         pos.history[date] = profit
-      else: # if (in_the_money == False):      
+      else: # if (in_the_money == False):
         loss = pdelta * order.quantity * order.leverage
-        residual = margin - loss
         pos.history[date] = (- loss)
 
   def record_net_end_of_day_pos(self, date):
@@ -180,11 +177,8 @@ class Account(HasAutoId):
       local_net = pos.history[date]
       total += local_net
     self.net_open_position[date] = total
-    
-  def header_str(self):
-    return 'date,id,cash,margin,net_booked_position,nop'
-    
-  def record_end_of_day_balances(self, date):    
+
+  def record_end_of_day_balances(self, date):
     self.d_cash_bal[date] = self.cash_bal
     self.d_margin_bal[date] = self.margin_bal
     self.d_net_booked_position[date] = self.net_booked_position
