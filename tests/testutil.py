@@ -66,6 +66,28 @@ class FakeDataFeed(object):
       return None
     return (today_value - past_value) / past_value
 
+  def n_day_rsi(self, instrument, d, field, n):
+    values = self._trailing_values(d, field, n + 1, include_current=True)
+    if (len(values) < n + 1):
+      return None
+
+    # this class's own _trailing_values is already oldest-first, unlike
+    # DataFeed's most-recent-first (see trailing_dates below) - no
+    # reversal needed to walk it chronologically
+    gains = []
+    losses = []
+    for i in range(1, len(values)):
+      change = values[i] - values[i - 1]
+      gains.append(change if (change > 0) else Decimal(0))
+      losses.append(-change if (change < 0) else Decimal(0))
+
+    avg_gain = mean(gains)
+    avg_loss = mean(losses)
+    if (avg_loss == 0):
+      return Decimal(100)
+
+    return Decimal(100) - (Decimal(100) / (Decimal(1) + (avg_gain / avg_loss)))
+
   def _trailing_values(self, d, field, n, include_current):
     dates = sorted(self.price_info_by_date.keys())
     if (d not in dates):
@@ -134,6 +156,9 @@ class FakeUniverse(SpreadStatsMixin):
 
   def n_day_return(self, instrument, d, field, n):
     return self._feed_for(instrument).n_day_return(instrument, d, field, n)
+
+  def n_day_rsi(self, instrument, d, field, n):
+    return self._feed_for(instrument).n_day_rsi(instrument, d, field, n)
 
   def trailing_dates(self, instrument, d, n, include_current):
     return self._feed_for(instrument).trailing_dates(d, n, include_current)
