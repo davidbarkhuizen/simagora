@@ -6,7 +6,10 @@ A position closes the same day one of the following happens, in this order:
 
 1. **Stop-loss** — intraday high/low reaches the order's `stop_loss` level. Checked
    before take-profit: daily OHLCV can't say which level a day's high/low range
-   hit first, so a day spanning both is resolved pessimistically, as a loss.
+   hit first, so a day spanning both is resolved pessimistically, as a loss. Never
+   triggers if `stop_loss` is `None` — that instead marks a fully-collateralized
+   position (the full notional value is held as margin, e.g. a plain unleveraged
+   buy-and-hold purchase) with no price-based exit at all.
 2. **Take-profit** — intraday high/low reaches the order's `take_profit` level.
    Never triggers if `take_profit` is `None` (`TrendFollowingStrategy`'s positions).
 3. **Expiry** — `Order.expiry_date` is reached; settles at that day's closing price.

@@ -56,6 +56,29 @@ class TestExecuteOrdersToOpen(unittest.TestCase):
     self.assertEqual(trader.ac.cash_bal, Decimal('9950'))
     self.assertEqual(trader.ac.margin_bal, Decimal('50'))
 
+  def test_open_buy_with_no_stop_loss_uses_full_notional_as_margin(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+
+    open_position(trader, broker, DAY1, stop_loss=None, take_profit=None, quantity=3)
+
+    # exec price = 100, no stop_loss -> full notional margin = 100 * 3 = 300
+    self.assertEqual(len(broker.open_positions), 1)
+    self.assertEqual(trader.ac.cash_bal, Decimal('9700'))
+    self.assertEqual(trader.ac.margin_bal, Decimal('300'))
+
+  def test_open_sell_with_no_stop_loss_also_uses_full_notional_as_margin(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+
+    open_position(trader, broker, DAY1, buysell='sell', stop_loss=None, take_profit=None, quantity=2)
+
+    # exec price = 100, no stop_loss -> full notional margin = 100 * 2 = 200
+    self.assertEqual(len(broker.open_positions), 1)
+    self.assertEqual(trader.ac.margin_bal, Decimal('200'))
+
 
 class TestExecuteOrdersToClose(unittest.TestCase):
 
@@ -176,6 +199,29 @@ class TestClosePrecedence(unittest.TestCase):
     self.assertEqual(len(self.broker.open_positions), 0)
     self.assertIn(pos, self.broker.closed_positions)
     self.assertEqual(pos.term_notice.reason, 'stop_loss')
+
+
+class TestNoStopLossPositions(unittest.TestCase):
+  '''a position opened with stop_loss=None is fully-collateralized and never auto-closes on loss'''
+
+  def setUp(self):
+    self.datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      # a low that would trip a typical stop_loss=90, but this
+      # position has none
+      DAY2: {'high': Decimal('105'), 'low': Decimal('50'), 'close': Decimal('100')},
+    })
+    (self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q,
+     self.broker, self.trader) = make_broker_and_trader(
+        self.datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+
+  def test_position_never_closes_via_stop_loss(self):
+    pos = open_position(self.trader, self.broker, DAY1, stop_loss=None, take_profit=None)
+
+    self.broker.manage_open_positions(DAY2)
+
+    self.assertIn(pos, self.broker.open_positions)
+    self.assertEqual(len(self.broker.closed_positions), 0)
 
 
 class TestInstrumentNotTradingGuards(unittest.TestCase):

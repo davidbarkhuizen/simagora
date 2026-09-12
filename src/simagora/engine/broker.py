@@ -90,7 +90,12 @@ class Broker(object):
 
       # calculate margin req - scales with the order's own quantity/leverage
       margin = None
-      if (order.buysell == 'buy'):
+      if (order.stop_loss is None):
+        # no stop-loss level - a fully-collateralized position (the
+        # full notional value is held as margin) with no price-based
+        # exit, e.g. a plain unleveraged buy-and-hold purchase
+        margin = exec_price * order.quantity * order.leverage
+      elif (order.buysell == 'buy'):
         margin = (exec_price - order.stop_loss) * order.quantity * order.leverage
       else: # sell
         margin = (order.stop_loss - exec_price) * order.quantity * order.leverage
@@ -197,6 +202,13 @@ class Broker(object):
     take loss on account
     '''
     order = pos.order_receipt.order
+
+    if (order.stop_loss is None):
+      # no stop-loss level (a fully-collateralized position) - never
+      # auto-closes on loss, only on take-profit, expiry, or an
+      # explicit close
+      return False
+
     rising_triggers = (order.buysell == 'sell')
 
     if self._level_hit(pdata, order.stop_loss, rising_triggers):
