@@ -12,12 +12,22 @@ class MsgQ(object):
       return self.q.pop(0)
   
   def extract_matching(self, match_fn):
+    '''
+    remove and return every queued item match_fn(item) is True for, in
+    their original relative order; items match_fn is False for stay
+    queued, also in their original relative order. A single O(n) pass
+    partitioning into two lists - the previous while-loop-plus-
+    list.pop(i) version rescanned and shifted the whole remaining list
+    on every single match, O(n) per pop, so O(n*k) overall for k
+    matches (worst case O(n^2) if every item matches).
+    '''
     matching = []
-    i = 0
-    while (i < len(self.q)):
-      if (match_fn(self.q[i]) == True):        
-        matching.append(self.q.pop(i))
+    remaining = []
+    for item in self.q:
+      if (match_fn(item) == True):
+        matching.append(item)
       else:
-        i = i + 1
+        remaining.append(item)
+    self.q = remaining
     return matching
     
