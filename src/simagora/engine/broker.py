@@ -52,30 +52,40 @@ class Broker(object):
     '''
     return [x for x in self.open_positions if (x.order_receipt.order.trader_id == trader_id)]
     
-  def execute_orders_to_open(self, date):    
+  def _calc_execution_price_or_reject(self, order, ins, buysell, date):
+    '''
+    calc_execution_price(ins, buysell, date), or None after queuing an
+    'instrument_not_trading' rejection receipt for order - shared by
+    execute_orders_to_open/execute_orders_to_close, since either can
+    hit a date whose instrument has no data (only reachable with a
+    multi-instrument Universe whose instruments don't all share the
+    same trading calendar)
+    '''
+    exec_price = self.calc_execution_price(ins, buysell, date)
+    if (exec_price is None):
+      receipt = OrderReceipt(order, 'instrument_not_trading', 0, date, 0)
+      self.receiptQ.put(receipt)
+    return exec_price
+
+  def execute_orders_to_open(self, date):
     '''
     search the orderQ for orders to open positions
     calc execution price
     calc margin requirement, and confirm sufficient funds
     open position
     generate OrderReceipt & place on orderQ
-    '''   
+    '''
     filter = lambda x: (isinstance(x, Order) == True)
-    orders_to_open = self.orderQ.extract_matching(filter)    
-    
+    orders_to_open = self.orderQ.extract_matching(filter)
+
     for order in orders_to_open:
 
       trader = self.traders[order.trader_id]
 
       # calc exec price
-      exec_price = self.calc_execution_price(order.ins, order.buysell, date)
+      exec_price = self._calc_execution_price_or_reject(order, order.ins, order.buysell, date)
 
       if (exec_price is None):
-        # order.ins has no data for date - only reachable with a
-        # multi-instrument Universe whose instruments don't all share
-        # the same trading calendar
-        receipt = OrderReceipt(order, 'instrument_not_trading', 0, date, 0)
-        self.receiptQ.put(receipt)
         continue
 
       # calculate margin req - scales with the order's own quantity/leverage
@@ -232,12 +242,9 @@ class Broker(object):
         receipt = OrderReceipt(close_order, 'not_authorized', 0, date, 0)
       else:
         order = pos.order_receipt.order
-        exec_price = self.calc_execution_price(order.ins, order.buysell, date)
+        exec_price = self._calc_execution_price_or_reject(close_order, order.ins, order.buysell, date)
 
         if (exec_price is None):
-          # order.ins has no data for date - see execute_orders_to_open
-          receipt = OrderReceipt(close_order, 'instrument_not_trading', 0, date, 0)
-          self.receiptQ.put(receipt)
           continue
 
         trader = self.traders[order.trader_id]
