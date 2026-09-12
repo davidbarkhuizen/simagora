@@ -5,18 +5,6 @@ import datetime
 import logging
 from decimal import *
 
-def load_csv_list_from_file(file_path):
-  f = open(file_path, 'r')
-  line = f.readline()
-  f.close()
-  splut = line.split(',')
-  tokens = []
-  for token in splut:
-    cleaned = token.strip()
-    if len(cleaned) > 0:
-      tokens.append(cleaned)
-  return tokens
-  
 def parse_string_to_date(date_str):
   '''parse date string of format yyyy-mm-dd to datetime.date'''
 
@@ -84,31 +72,4 @@ def rows_to_dicts(rows):
       dicts.append(dict)
 
   return dicts
-  
-  
-def parse_rows_to_distinct_lists(data_rows, clip_first_line=True):
-  '''
-  return (date, open, high, low, close, adj_close, volume) from list of data_rows
-  '''
 
-  date, open, high, low, close, adj_close, volume = [], [], [], [], [], [], []
-
-  start_idx = 0
-  if clip_first_line == True:
-    start_idx = 1
-
-  for i in range(start_idx, len(data_rows)):
-
-    row_data = row_to_dict(data_rows[i])
-
-    date.append(row_data['date'])
-    open.append(row_data['open'])
-    high.append(row_data['high'])
-    low.append(row_data['low'])
-    close.append(row_data['close'])
-    adj_close.append(row_data['adj_close'])
-    volume.append(row_data['volume'])    
-
-  return date, open, high, low, close, adj_close, volume
-
-  
