@@ -36,12 +36,6 @@ simplification.
   equity" figure (see §3), but no strategy actually sizes against it yet —
   %-of-equity or volatility-targeted sizing would still need to be built
   per-strategy.
-- **`Account.closed_trades` is dead.** Initialized in `__init__` but never
-  appended to anywhere — every position close path (`_close_position`,
-  `stop_loss`, `handle_expiry`) updates `cash_bal`/`margin_bal`/
-  `net_booked_position` and the position's own `term_notice`, but none of
-  them record onto this list. Blocks trade-level reporting (win rate,
-  average win/loss, trade count) until it's wired up.
 - **No margin calls / forced liquidation, no leverage limits, no borrow
   cost for short positions, no multi-currency.** None of these are modeled
   at all; not required at this scale, but a real gap if the simulator's
@@ -76,12 +70,12 @@ rewrite:
 - ~~**Analytics/reporting.**~~ Done: `Account.equity(date)`/`equity_curve()`
   (cash + margin + unrealized open-position P&L, off the daily
   `d_cash_bal`/`d_margin_bal`/`net_open_position` series already tracked)
-  plus `engine/stats.py` (`total_return`, `cagr`, `max_drawdown`,
-  `sharpe_ratio`) now cover CAGR/drawdown/Sharpe off that existing data.
-  Still missing: win rate and trade-level summaries, which need
-  `Account.closed_trades` actually wired up (it's initialized but never
-  appended to) — a separate, smaller follow-on. `Simulator.plot()` remains
-  the only *chart* surface.
+  and `Account.closed_trades`/`trade_pnls()` (now appended to by every
+  close path — `_close_position`, `stop_loss`, `handle_expiry`) feed
+  `engine/stats.py`'s `total_return`, `cagr`, `max_drawdown`,
+  `sharpe_ratio`, `win_rate`, `average_win`, `average_loss`.
+  `Simulator.plot()` remains the only *chart* surface — nothing renders
+  these numbers yet, they're library functions a caller invokes directly.
 - **Transaction cost modeling** could slot into
   `Broker.calc_execution_price`/`_calc_execution_price_or_reject` as an
   optional cost parameter without touching call sites.
@@ -116,9 +110,11 @@ rewrite:
 ## Biggest bang-for-buck
 
 ~~An `Account.equity()` accessor plus a small stats module (Sharpe/drawdown/
-CAGR off the data already being tracked)~~ — done, see §3. Both were
-additive and touched no existing logic.
+CAGR off the data already being tracked)~~ — done, see §3. ~~Wire up
+`Account.closed_trades` so win rate and average win/loss can be added to
+`stats.py`~~ — also done, see §3. All four were additive and touched no
+existing bookkeeping logic.
 
-Next biggest bang-for-buck: wire up `Account.closed_trades` (§1) so
-win rate and average win/loss can be added to `stats.py` alongside CAGR/
-drawdown/Sharpe.
+Next candidate: wiring up `Order.leverage` (§3) — it activates an
+already-implemented code path for free, and would let `stats.py`'s new
+per-trade metrics be exercised against leveraged, not just 1x, positions.

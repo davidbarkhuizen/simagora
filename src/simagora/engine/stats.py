@@ -74,3 +74,28 @@ def sharpe_ratio(equity_curve, risk_free_rate=Decimal(0), trading_days_per_year=
     return Decimal(0)
 
   return (mean(excess_returns) / std) * trading_days_per_year.sqrt()
+
+
+def win_rate(trade_pnls):
+  '''
+  fraction of a non-empty sequence of realized trade P&Ls (e.g.
+  Account.trade_pnls()) that are wins (pnl > 0) - a breakeven trade
+  (pnl == 0) does not count as a win
+  '''
+  wins = sum(1 for pnl in trade_pnls if pnl > 0)
+  return Decimal(wins) / Decimal(len(trade_pnls))
+
+
+def average_win(trade_pnls):
+  '''mean of the winning (pnl > 0) values in trade_pnls, 0 if there are none'''
+  wins = [pnl for pnl in trade_pnls if pnl > 0]
+  return mean(wins) if wins else Decimal(0)
+
+
+def average_loss(trade_pnls):
+  '''
+  mean of the losing (pnl < 0) values in trade_pnls, 0 if there are
+  none - a negative Decimal (a signed average), not a loss magnitude
+  '''
+  losses = [pnl for pnl in trade_pnls if pnl < 0]
+  return mean(losses) if losses else Decimal(0)
