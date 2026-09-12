@@ -1,6 +1,7 @@
 import unittest
 import os
 import tempfile
+from decimal import Decimal
 from unittest import mock
 from datetime import date
 
@@ -42,6 +43,28 @@ class TestRowsToDicts(unittest.TestCase):
     self.assertEqual(len(dicts), 1)
     self.assertEqual(dicts[0]['volume'], 0)
     self.assertEqual(dicts[0]['adj_close'], 0)
+
+  def test_adjusted_ohlc_scales_by_the_close_to_adj_close_ratio(self):
+    # adj_close(90) is 90% of close(100) - e.g. a 10% dividend/split
+    # adjustment - so open/high/low scale by the same 0.9 ratio
+    rows = [['2010-01-01', '100', '110', '90', '100', '1000', '90']]
+
+    dicts = rows_to_dicts(rows)
+
+    self.assertEqual(dicts[0]['adj_open'], Decimal('90'))
+    self.assertEqual(dicts[0]['adj_high'], Decimal('99'))
+    self.assertEqual(dicts[0]['adj_low'], Decimal('81'))
+
+  def test_adjusted_ohlc_is_unadjusted_when_adj_close_is_missing(self):
+    # no adj_close column at all -> defaults to 0 -> ratio of 1 (no
+    # adjustment), not a zeroed-out bar
+    rows = [['2010-01-01', '100', '110', '90', '100']]
+
+    dicts = rows_to_dicts(rows)
+
+    self.assertEqual(dicts[0]['adj_open'], Decimal('100'))
+    self.assertEqual(dicts[0]['adj_high'], Decimal('110'))
+    self.assertEqual(dicts[0]['adj_low'], Decimal('90'))
 
 
 class TestLoadCsvDataRows(unittest.TestCase):

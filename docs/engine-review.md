@@ -9,15 +9,6 @@ simplification.
 
 ## 1. Obvious logical gaps
 
-- **`adj_close` is reachable but incomplete.** `csvhandler.row_to_dict`
-  parses it into every bar, and it's fully wired into `get_price`/
-  `get_price_info` like any other field (`get_price(ins, date,
-  'adj_close')` already works) - but nothing besides `close` has an
-  adjusted counterpart. `open`/`high`/`low` stay raw, so a strategy that
-  switches its own price field to `'adj_close'` still gets an internally
-  inconsistent bar: every `n_day_high`/`n_day_low`/`n_day_atr` helper
-  keeps computing off unadjusted highs/lows, reintroducing the exact
-  split/dividend artifact adjusted pricing exists to avoid.
 - **No margin calls / forced liquidation, no leverage limits, no borrow
   cost for short positions, no multi-currency.** None of these are modeled
   at all; not required at this scale, but a real gap if the simulator's
@@ -77,17 +68,21 @@ None outstanding.
 
 ## Biggest bang-for-buck
 
-`Broker.tighten_stop_loss` closes out the last "add one primitive,
-unblock a bigger feature" win inside "order types are a fixed shape"
-(§1) - what's left there (limit orders, partial fills) both need
-persistent, multi-day order state the engine doesn't have today (an
-order is drained from `orderQ` and resolved once, not kept pending
-across runs of `open_manage_and_close`), which is a structural change,
-not a single additive primitive.
+`adj_open`/`adj_high`/`adj_low` (derived from each bar's own
+`close`-to-`adj_close` ratio) close out §1's `adj_close` item - a
+strategy switching to the adjusted price series now gets an internally
+consistent OHLC bar, the same way `adj_close` alone already worked.
 
-The next real, scoped gap: §1's `adj_close` item. A fix: derive
-`adj_open`/`adj_high`/`adj_low` at CSV-load time
-(`csvhandler.row_to_dict` or `DataFeed`) from each row's own
-`close`-to-`adj_close` ratio, so a fully split/dividend-consistent OHLC
-bar is available as a set, not one adjusted field mixed with three raw
-ones.
+The next real, scoped gap: finish the other half of §4's "no
+market-impact modeling" note. `_filled_quantity_by_ins_date` (added for
+`max_volume_fraction_per_fill`) already tracks how much of an
+instrument's day has been filled before a given order - `calc_execution_price`
+just never reads it. An opt-in `Broker.market_impact_factor` (default
+0/None, preserving today's flat `(high+low)/2`) could shift the price
+further, unfavorably, in proportion to
+`already_filled / day_volume` - so the *second* trader (or the second
+half of one large order, once partial fills exist) filling the same
+instrument on the same day pays more than the first, rather than every
+fill getting an identical price regardless of how much of the day's
+liquidity is already spoken for. Reuses infrastructure the liquidity
+cap already built rather than needing new state.
