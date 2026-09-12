@@ -331,5 +331,39 @@ class TestHandleExpirySign(unittest.TestCase):
     self.assertEqual(pos.history[DAY2], Decimal('10'))
 
 
+class TestHandleExpiryTransactionCost(unittest.TestCase):
+  '''
+  handle_expiry's exit price (used for both the pnl calc and the
+  recorded term_notice) now goes through Broker.apply_exit_cost, same
+  as stop_loss/take_profit - previously it settled at pdata['close']
+  untouched by transaction_cost
+  '''
+
+  def setUp(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, self.broker, self.trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1, transaction_cost=Decimal('1'))
+
+  def test_in_the_money_expiry_charges_cost_on_the_exit(self):
+    pos = make_manual_position(self.broker, self.trader, 's&p500', 'buy', execution_price=Decimal('100'))
+    pdata = {'close': Decimal('110')}
+
+    self.trader.ac.handle_expiry(DAY2, pos, pdata, 'buy')
+
+    # exit fills as a sell: close(110) - cost(1) = 109; pdelta = 9 (vs. 10 with no cost)
+    self.assertEqual(pos.term_notice.term_price, Decimal('109'))
+    self.assertEqual(pos.history[DAY2], Decimal('9'))
+
+  def test_out_of_the_money_expiry_charges_cost_on_the_exit(self):
+    pos = make_manual_position(self.broker, self.trader, 's&p500', 'buy', execution_price=Decimal('100'))
+    pdata = {'close': Decimal('90')}
+
+    self.trader.ac.handle_expiry(DAY2, pos, pdata, 'buy')
+
+    # exit fills as a sell: close(90) - cost(1) = 89; pdelta = 11 (vs. 10 with no cost)
+    self.assertEqual(pos.term_notice.term_price, Decimal('89'))
+    self.assertEqual(pos.history[DAY2], Decimal('-11'))
+
+
 if __name__ == '__main__':
   unittest.main()

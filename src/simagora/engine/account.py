@@ -75,27 +75,20 @@ class Account(HasAutoId):
   def take_profit(self, date, pos, pdata, buysell):
     '''
     '''
-    self._close_position(date, pos, pos.order_receipt.order.take_profit, buysell, 'take_profit')
+    exit_price = self.broker.apply_exit_cost(pos.order_receipt.order.take_profit, buysell)
+    self._close_position(date, pos, exit_price, buysell, 'take_profit')
 
   def stop_loss(self, date, pos, pdata, buysell):
     '''
+    closes via _close_position, same as take_profit/close_at_price -
+    at zero transaction_cost this reduces to exactly the old forfeit-
+    the-whole-margin behavior (margin was defined at order-open time
+    as the exec-price-to-stop_loss pdelta, so recomputing that same
+    pdelta here nets out identically); a nonzero cost now additionally
+    deepens the loss past the capped margin, same as every other exit
     '''
-    margin = pos.order_receipt.margin
-    order = pos.order_receipt.order
-
-    # free margin
-    self.margin_bal -= margin
-
-    # record net loss
-    self.net_booked_position = self.net_booked_position - margin    
-    pos.history[date] = -margin
-                        
-    pos.term_notice = TermNotice(date, order.stop_loss, pos.id, 'stop_loss', (Decimal(0)-margin))
-    self.closed_trades.append(pos)
-
-    # cash_bal, margin_bal, net_booked_position
-    # logging.info('%s,%s,%s,%s,%s' % (str(date), self.cash_bal, self.margin_bal, self.net_booked_position, pos.close_str()))    
-
+    exit_price = self.broker.apply_exit_cost(pos.order_receipt.order.stop_loss, buysell)
+    self._close_position(date, pos, exit_price, buysell, 'stop_loss')
 
   def close_at_price(self, date, pos, price, buysell):
     '''
@@ -112,7 +105,8 @@ class Account(HasAutoId):
     order = pos.order_receipt.order
     receipt = pos.order_receipt
 
-    pdelta, in_the_money = _pdelta_and_moneyness(buysell, receipt.execution_price, pdata['close'])
+    exit_price = self.broker.apply_exit_cost(pdata['close'], buysell)
+    pdelta, in_the_money = _pdelta_and_moneyness(buysell, receipt.execution_price, exit_price)
 
     reason = None
       
@@ -155,7 +149,7 @@ class Account(HasAutoId):
      
     # term_date, term_price, position_id, reason, profitloss) 
       
-    pos.term_notice = TermNotice(date, pdata['close'], pos.id, reason, delta)
+    pos.term_notice = TermNotice(date, exit_price, pos.id, reason, delta)
     self.closed_trades.append(pos)
 
     # cash_bal, margin_bal, net_booked_position
