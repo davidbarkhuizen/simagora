@@ -1,8 +1,13 @@
 '''
-exercises DualMomentumStrategy end-to-end through a real Trader, with
-a FakeUniverse standing in for Universe - AAA/BBB fixtures are set up
-per test so day2's relative ranking (and, in some tests, day1's
-as well) is whatever that test needs
+exercises DualMomentumStrategy's own ranking/absolute-momentum-filter
+logic end-to-end through a real Trader, with a FakeUniverse standing
+in for Universe - AAA/BBB fixtures are set up per test so day2's
+relative ranking (and, in some tests, day1's as well) is whatever that
+test needs. rebalance_to's shared hold-without-churn/rotate-out-of-
+stale-positions contract (inherited unchanged from
+MultiInstrumentStrategy) is tested once, directly, in
+test_strategy_base.py's TestRebalanceTo, rather than re-verified per
+strategy
 '''
 
 import unittest
@@ -58,33 +63,6 @@ class TestDualMomentumStrategy(unittest.TestCase):
     close_orders = submitted_close_orders(orderQ)
     self.assertEqual([co.position_id for co in close_orders], [pos.id])
     self.assertEqual(len(submitted_orders(orderQ)), 0)
-
-  def test_holds_the_leader_without_churn_when_it_is_unchanged(self):
-    orderQ, broker, trader = self.make_trader(
-      {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('110')}},   # +10%, still leader
-      {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('102')}})   # +2%
-    make_manual_position(broker, trader, 'AAA')
-
-    trader.execute_strategy(DAY2)
-
-    self.assertEqual(len(submitted_orders(orderQ)), 0)
-    self.assertEqual(len(submitted_close_orders(orderQ)), 0)
-
-  def test_rotates_out_of_the_old_leader_into_the_new_one(self):
-    orderQ, broker, trader = self.make_trader(
-      {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('110')}},   # +10%, new leader
-      {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('102')}})   # +2%
-    pos = make_manual_position(broker, trader, 'BBB')  # yesterday's leader
-
-    trader.execute_strategy(DAY2)
-
-    close_orders = submitted_close_orders(orderQ)
-    self.assertEqual([co.position_id for co in close_orders], [pos.id])
-
-    new_orders = submitted_orders(orderQ)
-    self.assertEqual(len(new_orders), 1)
-    self.assertEqual(new_orders[0].ins, 'AAA')
-
 
 if __name__ == '__main__':
   unittest.main()

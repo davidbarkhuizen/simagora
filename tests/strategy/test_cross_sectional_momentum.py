@@ -1,8 +1,13 @@
 '''
-exercises CrossSectionalMomentumStrategy end-to-end through a real
-Trader, with a FakeUniverse standing in for Universe - AAA/BBB/CCC
-fixtures are set up per test so day2's relative ranking is whatever
-that test needs
+exercises CrossSectionalMomentumStrategy's own ranking logic
+end-to-end through a real Trader, with a FakeUniverse standing in for
+Universe - AAA/BBB/CCC fixtures are set up per test so day2's relative
+ranking is whatever that test needs. rebalance_to's shared
+hold-without-churn/rotate-out-of-stale-positions contract (inherited
+unchanged from MultiInstrumentStrategy, including its per-(instrument,
+buysell)-tuple-key behavior this strategy relies on) is tested once,
+directly, in test_strategy_base.py's TestRebalanceTo, rather than
+re-verified per strategy
 '''
 
 import unittest
@@ -10,7 +15,7 @@ from decimal import Decimal
 
 from simagora.engine.strategy import CrossSectionalMomentumStrategy
 
-from testutil import DAY1, DAY2, make_multi_instrument_trader, make_manual_position, submitted_orders, submitted_close_orders
+from testutil import DAY1, DAY2, make_multi_instrument_trader, submitted_orders, submitted_close_orders
 
 
 class _ShortLookbackCrossSectionalMomentum(CrossSectionalMomentumStrategy):
@@ -49,33 +54,6 @@ class TestCrossSectionalMomentumStrategy(unittest.TestCase):
     by_ins = {o.ins: o.buysell for o in orders}
     self.assertEqual(by_ins, {'AAA': 'buy', 'CCC': 'sell'})  # BBB (middle) untouched
     self.assertEqual(len(submitted_close_orders(orderQ)), 0)
-
-  def test_holds_existing_long_and_short_without_churn_when_unchanged(self):
-    orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
-    make_manual_position(broker, trader, 'AAA', 'buy')
-    make_manual_position(broker, trader, 'CCC', 'sell')
-
-    trader.execute_strategy(DAY2)
-
-    self.assertEqual(len(submitted_orders(orderQ)), 0)
-    self.assertEqual(len(submitted_close_orders(orderQ)), 0)
-
-  def test_rotates_out_of_stale_positions_into_the_new_ranking(self):
-    orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
-    # yesterday's ranking had this backwards
-    stale_long = make_manual_position(broker, trader, 'CCC', 'buy')
-    stale_short = make_manual_position(broker, trader, 'AAA', 'sell')
-
-    trader.execute_strategy(DAY2)
-
-    close_orders = submitted_close_orders(orderQ)
-    self.assertEqual(
-      {co.position_id for co in close_orders},
-      {stale_long.id, stale_short.id})
-
-    new_orders = submitted_orders(orderQ)
-    by_ins = {o.ins: o.buysell for o in new_orders}
-    self.assertEqual(by_ins, {'AAA': 'buy', 'CCC': 'sell'})
 
   def test_top_and_bottom_do_not_overlap_in_a_universe_too_small_to_fill_both(self):
     class _BothSides(_ShortLookbackCrossSectionalMomentum):
