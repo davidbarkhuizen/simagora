@@ -132,7 +132,7 @@ class Simulator(object):
     mavg_band_ceiling = []
     mavg_band_floor = []
     
-    trader = self.broker.traders[0]   
+    trader = self.traders[0]
     ac = trader.ac
    
     df = self.datafeed
