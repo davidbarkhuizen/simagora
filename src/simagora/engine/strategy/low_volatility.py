@@ -27,16 +27,4 @@ class LowVolatilityStrategy(MultiInstrumentStrategy):
       return
 
     calmest = set(sorted(vols, key=vols.get)[:self.top_n])
-    open_by_ins = self.open_positions_by(lambda o: o.ins, lambda o: o.buysell == 'buy')
-
-    # CLOSE POSITIONS THAT FELL OUT OF THE CALMEST SET
-    for ins, positions in open_by_ins.items():
-      if (ins not in calmest):
-        self.close_positions(positions, date)
-
-    # OPEN WHATEVER'S CALMEST AND NOT ALREADY HELD
-    for ins in calmest:
-      if (ins in open_by_ins):
-        continue
-      cur_price = self.datafeed.get_price(ins, date, 'close')
-      self.submit_stop_only_order(ins, 'buy', 1, cur_price, self.stop_loss_margin, date)
+    self.rebalance_to(calmest, lambda o: o.ins, self._open_long, date, filter_fn=lambda o: o.buysell == 'buy')

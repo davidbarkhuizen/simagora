@@ -138,3 +138,39 @@ class MultiInstrumentStrategy(BaseStrategy):
   def close_positions(self, positions, date):
     for pos in positions:
       self.submit_order(CloseOrder(pos.id, date))
+
+  def _open_long(self, ins, date):
+    '''
+    open_fn shape shared by DualMomentumStrategy/LowVolatilityStrategy:
+    a single-unit long position sized off self.stop_loss_margin at the
+    day's current price - fits rebalance_to's open_fn(key, date)
+    contract for a strategy whose key is a bare instrument
+    '''
+    cur_price = self.datafeed.get_price(ins, date, 'close')
+    self.submit_stop_only_order(ins, 'buy', 1, cur_price, self.stop_loss_margin, date)
+
+  def rebalance_to(self, desired, key_fn, open_fn, date, filter_fn=None):
+    '''
+    reconcile this trader's currently open positions against a
+    `desired` set of keys (whatever key_fn(order) produces - e.g. an
+    instrument, or an (instrument, buysell) pair): close every open
+    position whose key fell out of desired, then call open_fn(key,
+    date) for every desired key not already held. A key already held
+    is left alone rather than churned.
+
+    The shared rebalance shape behind every ranking/rotation strategy
+    (DualMomentum, CrossSectionalMomentum, LowVolatility): they differ
+    only in how `desired`/key_fn are computed and what open_fn actually
+    submits, not in the close-what-fell-out/open-what's-missing logic
+    itself.
+    '''
+    open_by_key = self.open_positions_by(key_fn, filter_fn)
+
+    for key, positions in open_by_key.items():
+      if (key not in desired):
+        self.close_positions(positions, date)
+
+    for key in desired:
+      if (key in open_by_key):
+        continue
+      open_fn(key, date)

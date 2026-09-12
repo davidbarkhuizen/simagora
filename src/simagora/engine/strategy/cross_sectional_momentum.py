@@ -27,6 +27,11 @@ class CrossSectionalMomentumStrategy(MultiInstrumentStrategy):
   bottom_n = 1
   stop_loss_margin = Decimal('0.05')  # 5 %
 
+  def _open_leg(self, key, date):
+    ins, buysell = key
+    cur_price = self.datafeed.get_price(ins, date, 'close')
+    self.submit_stop_only_order(ins, buysell, 1, cur_price, self.stop_loss_margin, date)
+
   def execute(self, date):
     returns = self.rank_universe_or_none(
       lambda ins: self.datafeed.n_day_return(ins, date, 'close', self.lookback_window_days))
@@ -40,16 +45,4 @@ class CrossSectionalMomentumStrategy(MultiInstrumentStrategy):
     shorts -= longs  # guard a universe too small to fill both sides distinctly
 
     desired = set((ins, 'buy') for ins in longs) | set((ins, 'sell') for ins in shorts)
-    open_by_key = self.open_positions_by(lambda o: (o.ins, o.buysell))
-
-    # CLOSE POSITIONS THAT FELL OUT OF THE DESIRED SET
-    for key, positions in open_by_key.items():
-      if (key not in desired):
-        self.close_positions(positions, date)
-
-    # OPEN WHATEVER'S DESIRED AND NOT ALREADY HELD
-    for (ins, buysell) in desired:
-      if ((ins, buysell) in open_by_key):
-        continue
-      cur_price = self.datafeed.get_price(ins, date, 'close')
-      self.submit_stop_only_order(ins, buysell, 1, cur_price, self.stop_loss_margin, date)
+    self.rebalance_to(desired, lambda o: (o.ins, o.buysell), self._open_leg, date)
