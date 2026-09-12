@@ -16,7 +16,8 @@ from simagora.engine.trader import Trader
 
 from testutil import (
   FakeDataFeed, FakeUniverse, DAY1, DAY2, DAY1_PRICES,
-  make_broker, make_broker_and_trader, open_position,
+  make_broker, make_broker_and_trader, open_position, make_manual_position,
+  make_multi_instrument_trader,
 )
 
 
@@ -32,26 +33,15 @@ class TestStrategyCloseInTheMoneyPositions(unittest.TestCase):
         self.datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
     self.strategy = self.trader.strategy
 
-  def make_manual_position(self, ins, buysell, execution_price):
-    '''build a position directly, bypassing broker cash/margin bookkeeping,
-    to control its execution price precisely for pnl testing'''
-    order = Order(ins, buysell, 1, Decimal('1'), Decimal('1000'), DAY1)
-    order.trader_id = self.trader.id
-    receipt = OrderReceipt(order, 'opened', execution_price, DAY1, Decimal('0'))
-    pos = Position(receipt)
-    self.broker.open_positions.append(pos)
-    self.broker.positions[pos.id] = pos
-    return pos
-
   def test_close_in_the_money_positions_filters_by_direction_and_instrument(self):
     # day2 close (110) > day1 exec price (100): a 'buy' opened at 100 is in the money
-    profitable_buy = self.make_manual_position('s&p500', 'buy', Decimal('100'))
+    profitable_buy = make_manual_position(self.broker, self.trader, 's&p500', 'buy', Decimal('100'))
     # exec price (120) > day2 close (110): a 'buy' opened at 120 is a loss
-    losing_buy = self.make_manual_position('s&p500', 'buy', Decimal('120'))
+    losing_buy = make_manual_position(self.broker, self.trader, 's&p500', 'buy', Decimal('120'))
     # exec price (120) > day2 close (110): a 'sell' opened at 120 is in the money
-    profitable_sell = self.make_manual_position('s&p500', 'sell', Decimal('120'))
+    profitable_sell = make_manual_position(self.broker, self.trader, 's&p500', 'sell', Decimal('120'))
     # same as profitable_buy, but a different instrument
-    other_instrument_buy = self.make_manual_position('other_instrument', 'buy', Decimal('100'))
+    other_instrument_buy = make_manual_position(self.broker, self.trader, 'other_instrument', 'buy', Decimal('100'))
 
     self.trader.ac.tally_individual_open_positions(DAY2)
 
@@ -179,25 +169,8 @@ class TestDualMomentumStrategy(unittest.TestCase):
   '''
 
   def make_trader(self, aaa_prices, bbb_prices, end_date=DAY2):
-    aaa = FakeDataFeed(aaa_prices)
-    bbb = FakeDataFeed(bbb_prices)
-    universe_feed = FakeUniverse({'AAA': aaa, 'BBB': bbb})
-
-    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker) = make_broker(universe_feed)
-    trader = Trader(
-      universe_feed, broker, Decimal('10000'), 'AAA', None, DAY1, end_date,
-      universe=['AAA', 'BBB'])
-    trader.strategy = _ShortLookbackDualMomentum(trader, DAY1, end_date)
-    return orderQ, broker, trader
-
-  def make_manual_position(self, broker, trader, ins, execution_price=Decimal('100')):
-    order = Order(ins, 'buy', 1, Decimal('1'), None, DAY1)
-    order.trader_id = trader.id
-    receipt = OrderReceipt(order, 'opened', execution_price, DAY1, Decimal('0'))
-    pos = Position(receipt)
-    broker.open_positions.append(pos)
-    broker.positions[pos.id] = pos
-    return pos
+    return make_multi_instrument_trader(
+      {'AAA': aaa_prices, 'BBB': bbb_prices}, _ShortLookbackDualMomentum, end_date=end_date)
 
   def test_no_signal_without_enough_preceding_history(self):
     # DAY1 has no preceding day, so n_day_return is None for both
@@ -226,7 +199,7 @@ class TestDualMomentumStrategy(unittest.TestCase):
     orderQ, broker, trader = self.make_trader(
       {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('90')}},   # -10%
       {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('95')}})   # -5%
-    pos = self.make_manual_position(broker, trader, 'BBB')
+    pos = make_manual_position(broker, trader, 'BBB')
 
     trader.execute_strategy(DAY2)
 
@@ -238,7 +211,7 @@ class TestDualMomentumStrategy(unittest.TestCase):
     orderQ, broker, trader = self.make_trader(
       {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('110')}},   # +10%, still leader
       {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('102')}})   # +2%
-    self.make_manual_position(broker, trader, 'AAA')
+    make_manual_position(broker, trader, 'AAA')
 
     trader.execute_strategy(DAY2)
 
@@ -249,7 +222,7 @@ class TestDualMomentumStrategy(unittest.TestCase):
     orderQ, broker, trader = self.make_trader(
       {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('110')}},   # +10%, new leader
       {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('102')}})   # +2%
-    pos = self.make_manual_position(broker, trader, 'BBB')  # yesterday's leader
+    pos = make_manual_position(broker, trader, 'BBB')  # yesterday's leader
 
     trader.execute_strategy(DAY2)
 
@@ -276,24 +249,9 @@ class TestCrossSectionalMomentumStrategy(unittest.TestCase):
 
   def make_trader(self, prices_by_ins, universe=('AAA', 'BBB', 'CCC'),
                    end_date=DAY2, strategy_class=_ShortLookbackCrossSectionalMomentum):
-    feeds = {ins: FakeDataFeed(prices_by_ins[ins]) for ins in universe}
-    universe_feed = FakeUniverse(feeds)
-
-    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker) = make_broker(universe_feed)
-    trader = Trader(
-      universe_feed, broker, Decimal('10000'), universe[0], None, DAY1, end_date,
-      universe=list(universe))
-    trader.strategy = strategy_class(trader, DAY1, end_date)
-    return orderQ, broker, trader
-
-  def make_manual_position(self, broker, trader, ins, buysell='buy', execution_price=Decimal('100')):
-    order = Order(ins, buysell, 1, Decimal('1'), None, DAY1)
-    order.trader_id = trader.id
-    receipt = OrderReceipt(order, 'opened', execution_price, DAY1, Decimal('0'))
-    pos = Position(receipt)
-    broker.open_positions.append(pos)
-    broker.positions[pos.id] = pos
-    return pos
+    filtered_prices = {ins: prices_by_ins[ins] for ins in universe}
+    return make_multi_instrument_trader(
+      filtered_prices, strategy_class, instrument=universe[0], universe=list(universe), end_date=end_date)
 
   THREE_WAY_PRICES = {
     'AAA': {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('110')}},  # +10% - top
@@ -321,8 +279,8 @@ class TestCrossSectionalMomentumStrategy(unittest.TestCase):
 
   def test_holds_existing_long_and_short_without_churn_when_unchanged(self):
     orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
-    self.make_manual_position(broker, trader, 'AAA', 'buy')
-    self.make_manual_position(broker, trader, 'CCC', 'sell')
+    make_manual_position(broker, trader, 'AAA', 'buy')
+    make_manual_position(broker, trader, 'CCC', 'sell')
 
     trader.execute_strategy(DAY2)
 
@@ -332,8 +290,8 @@ class TestCrossSectionalMomentumStrategy(unittest.TestCase):
   def test_rotates_out_of_stale_positions_into_the_new_ranking(self):
     orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
     # yesterday's ranking had this backwards
-    stale_long = self.make_manual_position(broker, trader, 'CCC', 'buy')
-    stale_short = self.make_manual_position(broker, trader, 'AAA', 'sell')
+    stale_long = make_manual_position(broker, trader, 'CCC', 'buy')
+    stale_short = make_manual_position(broker, trader, 'AAA', 'sell')
 
     trader.execute_strategy(DAY2)
 
@@ -389,25 +347,7 @@ class TestLowVolatilityStrategy(unittest.TestCase):
   }
 
   def make_trader(self, prices_by_ins, end_date=DAY2, strategy_class=_ShortLookbackLowVolatility):
-    feeds = {ins: FakeDataFeed(prices) for ins, prices in prices_by_ins.items()}
-    universe_feed = FakeUniverse(feeds)
-    universe = list(prices_by_ins.keys())
-
-    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker) = make_broker(universe_feed)
-    trader = Trader(
-      universe_feed, broker, Decimal('10000'), universe[0], None, DAY1, end_date,
-      universe=universe)
-    trader.strategy = strategy_class(trader, DAY1, end_date)
-    return orderQ, broker, trader
-
-  def make_manual_position(self, broker, trader, ins, execution_price=Decimal('100')):
-    order = Order(ins, 'buy', 1, Decimal('1'), None, DAY1)
-    order.trader_id = trader.id
-    receipt = OrderReceipt(order, 'opened', execution_price, DAY1, Decimal('0'))
-    pos = Position(receipt)
-    broker.open_positions.append(pos)
-    broker.positions[pos.id] = pos
-    return pos
+    return make_multi_instrument_trader(prices_by_ins, strategy_class, end_date=end_date)
 
   def test_goes_long_the_calmest_instrument(self):
     orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
@@ -422,7 +362,7 @@ class TestLowVolatilityStrategy(unittest.TestCase):
 
   def test_holds_the_calmest_instrument_without_churn_when_unchanged(self):
     orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
-    self.make_manual_position(broker, trader, 'AAA')
+    make_manual_position(broker, trader, 'AAA')
 
     trader.execute_strategy(DAY2)
 
@@ -431,7 +371,7 @@ class TestLowVolatilityStrategy(unittest.TestCase):
 
   def test_rotates_out_of_a_position_that_is_no_longer_the_calmest(self):
     orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
-    stale = self.make_manual_position(broker, trader, 'CCC')  # the most volatile of the three
+    stale = make_manual_position(broker, trader, 'CCC')  # the most volatile of the three
 
     trader.execute_strategy(DAY2)
 
@@ -740,22 +680,9 @@ class TestPairsTradingStrategy(unittest.TestCase):
     aaa_prices[today] = {'close': aaa_today}
     bbb_prices[today] = {'close': bbb_today}
 
-    universe_feed = FakeUniverse({'AAA': FakeDataFeed(aaa_prices), 'BBB': FakeDataFeed(bbb_prices)})
-    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker) = make_broker(universe_feed)
-    trader = Trader(
-      universe_feed, broker, Decimal('10000'), 'AAA', None, DAY1, today,
-      universe=['AAA', 'BBB'])
-    trader.strategy = _ShortLookbackPairsTrading(trader, DAY1, today)
+    orderQ, broker, trader = make_multi_instrument_trader(
+      {'AAA': aaa_prices, 'BBB': bbb_prices}, _ShortLookbackPairsTrading, end_date=today)
     return orderQ, broker, trader, today
-
-  def make_manual_position(self, broker, trader, ins, buysell):
-    order = Order(ins, buysell, 1, Decimal('1') if (buysell == 'buy') else Decimal('1000'), None, DAY1)
-    order.trader_id = trader.id
-    receipt = OrderReceipt(order, 'opened', Decimal('100'), DAY1, Decimal('0'))
-    pos = Position(receipt)
-    broker.open_positions.append(pos)
-    broker.positions[pos.id] = pos
-    return pos
 
   def test_requires_exactly_two_instruments_in_the_universe(self):
     datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
@@ -808,7 +735,7 @@ class TestPairsTradingStrategy(unittest.TestCase):
 
   def test_does_not_open_a_second_pair_while_one_is_already_open(self):
     orderQ, broker, trader, today = self.make_trader(Decimal('200'), Decimal('100'))
-    self.make_manual_position(broker, trader, 'AAA', 'sell')
+    make_manual_position(broker, trader, 'AAA', 'sell')
 
     trader.execute_strategy(today)
 
@@ -816,8 +743,8 @@ class TestPairsTradingStrategy(unittest.TestCase):
 
   def test_closes_both_legs_once_the_spread_reverts(self):
     orderQ, broker, trader, today = self.make_trader(Decimal('100'), Decimal('100'))
-    pos_a = self.make_manual_position(broker, trader, 'AAA', 'sell')
-    pos_b = self.make_manual_position(broker, trader, 'BBB', 'buy')
+    pos_a = make_manual_position(broker, trader, 'AAA', 'sell')
+    pos_b = make_manual_position(broker, trader, 'BBB', 'buy')
 
     trader.execute_strategy(today)
 
