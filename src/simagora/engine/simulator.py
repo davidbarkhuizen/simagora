@@ -6,6 +6,7 @@ from .broker import Broker
 from .trader import Trader
 from .strategy import MovingAverageCrossoverStrategy
 from .msgq import MsgQ
+from . import stats
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
@@ -122,6 +123,41 @@ class Simulator(object):
         print('%i/100' % int(progress))
       
     self.traders[0].strategy.log_self()
+
+  def report_performance(self):
+    '''
+    computes and logs/prints engine/stats.py's performance metrics
+    (total_return, cagr, max_drawdown, sharpe_ratio, win_rate,
+    average_win, average_loss) for every trader, off its own
+    trader.ac.equity_curve()/trader.ac.trade_pnls() - previously these
+    were pure library calls nothing in Simulator/Launcher invoked, so
+    a real run never surfaced them anywhere outside the test suite.
+    '''
+    for trader in self.traders:
+      ac = trader.ac
+      equity_curve = ac.equity_curve()
+      trade_pnls = ac.trade_pnls()
+
+      lines = ['performance: trader %s (%s)' % (trader.id, trader.strategy_name)]
+
+      if equity_curve:
+        lines.append('  total_return = %s' % stats.total_return(equity_curve))
+        lines.append('  cagr = %s' % stats.cagr(equity_curve))
+        lines.append('  max_drawdown = %s' % stats.max_drawdown(equity_curve))
+        lines.append('  sharpe_ratio = %s' % stats.sharpe_ratio(equity_curve))
+      else:
+        lines.append('  no equity history recorded')
+
+      if trade_pnls:
+        lines.append('  win_rate = %s' % stats.win_rate(trade_pnls))
+        lines.append('  average_win = %s' % stats.average_win(trade_pnls))
+        lines.append('  average_loss = %s' % stats.average_loss(trade_pnls))
+      else:
+        lines.append('  no closed trades')
+
+      for line in lines:
+        print(line)
+        logging.info(line)
 
   def plot(self):
     '''

@@ -84,6 +84,40 @@ class TestPlotFindsTheRightTrader(unittest.TestCase):
     sim.plot()  # must not raise
 
 
+class TestReportPerformance(unittest.TestCase):
+  '''
+  Simulator.report_performance() surfaces engine/stats.py's metrics
+  (previously pure library calls nothing in Simulator/Launcher
+  invoked) off each trader's own equity_curve()/trade_pnls().
+  '''
+
+  def setUp(self):
+    self.data_root = tempfile.mkdtemp()
+    with open(os.path.join(self.data_root, 'testins.csv'), 'w', newline='') as f:
+      f.write('date,open,high,low,close,volume,adj_close\n')
+      f.write('2010-01-01,100,101,99,100,1000,100\n')
+      f.write('2010-01-02,100,103,100,102,1000,102\n')
+    self.original_default_data_root = datafeed_module.DEFAULT_DATA_ROOT
+    datafeed_module.DEFAULT_DATA_ROOT = self.data_root
+
+  def tearDown(self):
+    datafeed_module.DEFAULT_DATA_ROOT = self.original_default_data_root
+    shutil.rmtree(self.data_root)
+
+  def test_does_not_crash_with_a_recorded_equity_history_and_no_closed_trades(self):
+    sim = Simulator(
+      'testins', ['movavg'], date(2010, 1, 1), date(2010, 1, 2), Decimal('10000'))
+    sim.run()
+
+    sim.report_performance()  # must not raise (empty trade_pnls guarded separately from equity_curve)
+
+  def test_no_equity_history_before_a_run_does_not_crash(self):
+    sim = Simulator(
+      'testins', ['movavg'], date(2010, 1, 1), date(2010, 1, 2), Decimal('10000'))
+
+    sim.report_performance()  # must not raise (empty equity_curve guarded separately from trade_pnls)
+
+
 class TestSimulatorThreadsBrokerConfigToBroker(unittest.TestCase):
   '''
   transaction_cost/max_open_positions_per_trader/
