@@ -430,6 +430,28 @@ class TestPositionExpired(unittest.TestCase):
     self.assertEqual(len(self.broker.open_positions), 1)
     self.assertEqual(len(self.broker.closed_positions), 0)
 
+  def test_out_of_the_money_expiry_settles_margin_and_cash_correctly(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      # stays within the stop_loss/take_profit band, and closes below
+      # entry - a partial loss of margin, not a full stop-out
+      DAY2: {'high': Decimal('98'), 'low': Decimal('93'), 'close': Decimal('95')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+    pos = open_position(trader, broker, DAY1, expiry_date=DAY2)
+    # exec price = 100, margin = 100-90 = 10
+    self.assertEqual(trader.ac.margin_bal, Decimal('10'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9990'))
+
+    broker.manage_open_positions(DAY2)
+
+    # pdelta = 95-100 = -5 (a partial loss, well under the margin)
+    self.assertEqual(pos.term_notice.reason, 'expired out of the money')
+    self.assertEqual(trader.ac.margin_bal, Decimal('0'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9995'))
+    self.assertEqual(trader.ac.net_booked_position, Decimal('-5'))
+
 
 class TestClosePrecedence(unittest.TestCase):
   '''

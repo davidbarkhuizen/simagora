@@ -105,60 +105,21 @@ class Account(HasAutoId):
 
   def handle_expiry(self, date, pos, pdata, buysell):
     '''
+    closes via _close_position, same as take_profit/close_at_price/
+    stop_loss - the only thing specific to expiry is picking the
+    reason string, since a position can expire either in the money or
+    out of it; the pnl booking itself (including an out-of-the-money
+    loss exceeding the margin reserved at entry - expiry has no
+    stop-level cap the way stop_loss does) is identical to every other
+    exit path
     '''
-    margin = pos.order_receipt.margin
-    order = pos.order_receipt.order
     receipt = pos.order_receipt
 
     exit_price = self.broker.apply_exit_cost(pdata['close'], buysell)
-    pdelta, in_the_money = _pdelta_and_moneyness(buysell, receipt.execution_price, exit_price)
+    _, in_the_money = _pdelta_and_moneyness(buysell, receipt.execution_price, exit_price)
+    reason = 'expired in the money' if in_the_money else 'expired out of the money'
 
-    reason = None
-      
-    if (in_the_money == True):      
-      
-      # free margin
-      self.margin_bal -= margin
-      # retrieve cash
-      self.cash_bal += margin
-      
-      # take profit      
-      profit = pdelta * order.quantity * order.leverage
-      self.cash_bal = self.cash_bal + profit            
-      
-      # record profit
-      self.net_booked_position = self.net_booked_position + profit
-      pos.history[date] = profit
-      
-      delta = profit
-      reason = 'expired in the money'
-    
-    else: # if (in_the_money == False):      
-      
-      # free margin, don't transfer to cash ac
-      self.margin_bal -= margin
-            
-      # absorb partial loss of margin
-      # loss = movement from exec * leverage
-      loss = pdelta * order.quantity * order.leverage
-      residual = margin - loss
-      
-      self.cash_bal = self.cash_bal + residual
-      
-      # record loss
-      self.net_booked_position = self.net_booked_position - loss
-      pos.history[date] = -loss
-
-      delta = Decimal(0) - loss
-      reason = 'expired out of the money'
-     
-    # term_date, term_price, position_id, reason, profitloss) 
-      
-    pos.term_notice = TermNotice(date, exit_price, pos.id, reason, delta)
-    self.closed_trades.append(pos)
-
-    # cash_bal, margin_bal, net_booked_position
-    #logging.info('%s,%s,%s,%s,%s' % (str(date), self.cash_bal, self.margin_bal, self.net_booked_position, pos.close_str()))    
+    self._close_position(date, pos, exit_price, buysell, reason)
 
   def tally_individual_open_positions(self, date):
     '''
