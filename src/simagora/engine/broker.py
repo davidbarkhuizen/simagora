@@ -113,12 +113,7 @@ class Broker(object):
         self.open_positions.append(position)        
         
         self.positions[position.id] = position
-        
-        # cash_bal, margin_bal, net_booked_position
-        #print('s - ' + s)
-        l = '%s,%s,%s,%s,%s' % (str(date), trader.ac.cash_bal, trader.ac.margin_bal, trader.ac.net_booked_position, position.open_str())
-        #logging.info(l)            
-      
+
       # for handling by trader
       self.receiptQ.put(receipt)
         
@@ -285,13 +280,6 @@ class Broker(object):
     price = (pdata['high'] + pdata['low']) / Decimal(2)
     return price
 
-  def log_closed_positions(self):
-    '''
-    call log method on all in self.closed_positions
-    '''
-    for pos in self.closed_positions:
-      pos.log()
-      
   def log_all_positions(self, d):
     '''
     log net_value of all positions when open and at end of day on closing

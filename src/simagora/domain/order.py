@@ -40,7 +40,5 @@ class Order(HasAutoId):
     
     
 
-  def __unicode__(self):
-    return (self.ins + ' - ' + self.buysell + ' - ' + str(self.quantity))
   def __str__(self):
     return (self.ins + ' - ' + self.buysell + ' - ' + str(self.quantity))

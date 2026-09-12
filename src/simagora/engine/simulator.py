@@ -6,10 +6,8 @@ from .trader import Trader
 from .strategy import MovingAverageCrossoverStrategy
 from .msgq import MsgQ
 # ------------------
-import datetime
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 # ------------------
 import logging
 
