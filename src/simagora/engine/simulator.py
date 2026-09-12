@@ -5,10 +5,8 @@ from .broker import Broker
 from .trader import Trader
 from .strategy import MovingAverageCrossoverStrategy
 from .msgq import MsgQ
-# ------------------
 import numpy as np
 import matplotlib.pyplot as plt
-# ------------------
 import logging
 
 def progress_tracking_bounds(start_date, end_date):
