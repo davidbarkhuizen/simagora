@@ -148,6 +148,36 @@ class TestPositionExpired(unittest.TestCase):
     self.assertEqual(len(self.broker.closed_positions), 0)
 
 
+class TestClosePrecedence(unittest.TestCase):
+  '''
+  a single day's high/low range can span both the stop-loss and
+  take-profit levels at once, and there's no way to know from daily
+  OHLCV alone which was actually hit first intraday - manage_open_positions
+  must assume the pessimistic (loss-taking) outcome rather than the
+  optimistic one
+  '''
+
+  def setUp(self):
+    self.datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      # spans both the stop_loss=90 and take_profit=110 levels used by
+      # open_position()'s defaults
+      DAY2: {'high': Decimal('115'), 'low': Decimal('85'), 'close': Decimal('100')},
+    })
+    (self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q,
+     self.broker, self.trader) = make_broker_and_trader(
+        self.datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+
+  def test_stop_loss_takes_precedence_over_take_profit_on_the_same_day(self):
+    pos = open_position(self.trader, self.broker, DAY1)
+
+    self.broker.manage_open_positions(DAY2)
+
+    self.assertEqual(len(self.broker.open_positions), 0)
+    self.assertIn(pos, self.broker.closed_positions)
+    self.assertEqual(pos.term_notice.reason, 'stop_loss')
+
+
 class TestInstrumentNotTradingGuards(unittest.TestCase):
   '''
   only reachable with a multi-instrument Universe whose instruments
