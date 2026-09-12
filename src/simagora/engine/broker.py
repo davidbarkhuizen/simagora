@@ -11,7 +11,8 @@ class Broker(object):
   
   def __init__(self, datafeed, orderQ, receiptQ, term_req_Q, term_notice_Q, transaction_cost=Decimal(0),
                commission_per_trade=Decimal(0), max_open_positions_per_trader=None,
-               max_open_positions_per_instrument=None, max_margin_exposure_per_trader=None):
+               max_open_positions_per_instrument=None, max_margin_exposure_per_trader=None,
+               max_volume_fraction_per_fill=None):
     '''
     transaction_cost: a flat per-unit cost (in price terms) charged
     against every fill's execution price - see calc_execution_price.
@@ -32,6 +33,17 @@ class Broker(object):
     limits consulted by execute_orders_to_open before it opens a new
     position - see there. Each defaults to None (no limit), preserving
     the original unconstrained-opening behavior.
+
+    max_volume_fraction_per_fill: optional fraction of an instrument's
+    own day's traded volume (pdata['volume']) that every trader's
+    OPENING fills for that instrument may draw from, combined, on a
+    given date - see _exceeds_available_liquidity. Models multiple
+    traders competing for the same (finite) same-day liquidity in an
+    instrument, rather than each trader's own fill being entirely
+    independent of every other trader's, as it otherwise is (every
+    trader shares one Broker/orderQ but has no other point of
+    interaction). Defaults to None (no limit), preserving the original
+    unconstrained-opening behavior.
     '''
     self.datafeed = datafeed
 
@@ -46,14 +58,19 @@ class Broker(object):
     self.max_open_positions_per_trader = max_open_positions_per_trader
     self.max_open_positions_per_instrument = max_open_positions_per_instrument
     self.max_margin_exposure_per_trader = max_margin_exposure_per_trader
+    self.max_volume_fraction_per_fill = max_volume_fraction_per_fill
 
     self.traders = {}
-    
-    self.open_positions = []    
+
+    self.open_positions = []
     self.closed_positions = []
-    
+
     self.positions_opened_count = 0
     self.positions = {}
+
+    # cumulative opening quantity filled per (instrument, date) across
+    # every trader - see _exceeds_available_liquidity
+    self._filled_quantity_by_ins_date = {}
    
   def register_trader(self, trader):
     '''
@@ -134,6 +151,22 @@ class Broker(object):
     net_exposure = self._net_margin_exposure_for_trader(order.trader_id, order.ins, signed_margin)
     return net_exposure > self.max_margin_exposure_per_trader
 
+  def _exceeds_available_liquidity(self, order, date):
+    '''
+    True if opening order in full would push the day's total OPENING
+    fill quantity for order.ins - summed across every trader, not just
+    order's own - past max_volume_fraction_per_fill * that day's
+    traded volume (no limit if max_volume_fraction_per_fill is None,
+    or if order.ins has no data for date - _calc_execution_price_or_reject
+    already rejects that case before this is ever reached).
+    '''
+    if (self.max_volume_fraction_per_fill is None):
+      return False
+    pdata = self.datafeed.get_price_info(order.ins, date)
+    budget = pdata['volume'] * self.max_volume_fraction_per_fill
+    already_filled = self._filled_quantity_by_ins_date.get((order.ins, date), Decimal(0))
+    return (already_filled + order.quantity) > budget
+
   def _calc_execution_price_or_reject(self, order, ins, buysell, date):
     '''
     calc_execution_price(ins, buysell, date), or None after queuing an
@@ -193,6 +226,8 @@ class Broker(object):
         receipt = OrderReceipt(order, 'max_open_positions_per_instrument_exceeded', 0, date, 0)
       elif (self._exceeds_max_margin_exposure_per_trader(order, margin)):
         receipt = OrderReceipt(order, 'max_margin_exposure_per_trader_exceeded', 0, date, 0)
+      elif (self._exceeds_available_liquidity(order, date)):
+        receipt = OrderReceipt(order, 'exceeds_available_liquidity', 0, date, 0)
       elif ((margin + self.commission_per_trade) > trader.ac.cash_bal):
         receipt = OrderReceipt(order, 'insufficient_cash_bal', 0, date, 0)
       else:
@@ -202,12 +237,18 @@ class Broker(object):
         trader.ac.cash_bal -= margin
         trader.ac.cash_bal -= self.commission_per_trade
 
+        # draw down the instrument's own shared same-day liquidity -
+        # see _exceeds_available_liquidity
+        liquidity_key = (order.ins, date)
+        self._filled_quantity_by_ins_date[liquidity_key] = (
+          self._filled_quantity_by_ins_date.get(liquidity_key, Decimal(0)) + order.quantity)
+
         receipt = OrderReceipt(order, 'opened', exec_price, date, margin)
         position = Position(receipt)
         receipt.position_id = position.id
-        
-        self.open_positions.append(position)        
-        
+
+        self.open_positions.append(position)
+
         self.positions[position.id] = position
 
       # for handling by trader

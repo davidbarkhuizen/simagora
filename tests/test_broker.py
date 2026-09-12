@@ -464,6 +464,89 @@ class TestPortfolioRiskLimits(unittest.TestCase):
     self.assertEqual(receipts[0].status, 'max_margin_exposure_per_trader_exceeded')
 
 
+class TestSharedLiquidityCap(unittest.TestCase):
+  '''
+  max_volume_fraction_per_fill models multiple traders competing for
+  the same (finite) same-day liquidity in an instrument - previously
+  every trader's own opening fill was entirely independent of every
+  other trader's, with no way for one trader's flow to affect what's
+  still available to another
+  '''
+
+  def test_rejects_an_open_that_alone_exceeds_the_days_volume_budget(self):
+    datafeed = FakeDataFeed({
+      DAY1: {'high': Decimal('105'), 'low': Decimal('95'), 'close': Decimal('100'), 'volume': Decimal('100')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1,
+                              max_volume_fraction_per_fill=Decimal('0.1'))
+
+    # budget = 100 * 0.1 = 10; ordering quantity 11 alone exceeds it
+    order = Order('s&p500', 'buy', 11, Decimal('90'), Decimal('110'), DAY1)
+    trader.submit_order(order)
+    broker.execute_orders_to_open(DAY1)
+
+    self.assertEqual(len(broker.open_positions), 0)
+    receipts = receiptQ.extract_matching(lambda r: r.order is order)
+    self.assertEqual(receipts[0].status, 'exceeds_available_liquidity')
+
+  def test_multiple_traders_share_the_same_liquidity_budget(self):
+    datafeed = FakeDataFeed({
+      DAY1: {'high': Decimal('105'), 'low': Decimal('95'), 'close': Decimal('100'), 'volume': Decimal('100')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader1) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1,
+                              max_volume_fraction_per_fill=Decimal('0.1'))
+    trader2 = Trader(datafeed, broker, Decimal('10000'), 's&p500', None, DAY1, DAY1)
+
+    # budget = 100 * 0.1 = 10
+    order1 = Order('s&p500', 'buy', 6, Decimal('90'), Decimal('110'), DAY1)
+    trader1.submit_order(order1)
+    broker.execute_orders_to_open(DAY1)
+    self.assertEqual(len(broker.open_positions), 1)  # 6 of the shared 10 now used
+
+    # trader2's own order (6) would fit the raw budget alone, but
+    # trader1 already used 6 of the shared 10 - only 4 remain
+    order2 = Order('s&p500', 'buy', 6, Decimal('90'), Decimal('110'), DAY1)
+    trader2.submit_order(order2)
+    broker.execute_orders_to_open(DAY1)
+
+    self.assertEqual(len(broker.open_positions), 1)
+    receipts = receiptQ.extract_matching(lambda r: r.order is order2)
+    self.assertEqual(receipts[0].status, 'exceeds_available_liquidity')
+
+  def test_different_instruments_have_independent_budgets(self):
+    datafeed = FakeDataFeed({
+      DAY1: {'high': Decimal('105'), 'low': Decimal('95'), 'close': Decimal('100'), 'volume': Decimal('100')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1,
+                              max_volume_fraction_per_fill=Decimal('0.1'))
+
+    open_position(trader, broker, DAY1, ins='AAA', quantity=10)  # exactly exhausts AAA's own budget (10)
+
+    # BBB has its own independent budget, unaffected by AAA's usage
+    order = Order('BBB', 'buy', 10, Decimal('90'), Decimal('110'), DAY1)
+    trader.submit_order(order)
+    broker.execute_orders_to_open(DAY1)
+
+    self.assertEqual(len(broker.open_positions), 2)
+    receipts = receiptQ.extract_matching(lambda r: r.order is order)
+    self.assertEqual(receipts[0].status, 'opened')
+
+  def test_no_limit_by_default_even_without_a_volume_field(self):
+    # DAY1_PRICES has no 'volume' key at all - confirms the check
+    # short-circuits before ever touching pdata['volume'] when
+    # max_volume_fraction_per_fill is None (the default)
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+
+    open_position(trader, broker, DAY1)  # must not raise a KeyError on 'volume'
+
+    self.assertEqual(len(broker.open_positions), 1)
+
+
 class TestPositionExpired(unittest.TestCase):
 
   def setUp(self):

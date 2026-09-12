@@ -25,7 +25,8 @@ class Launcher(object):
                           commission_per_trade=p.get('commission_per_trade', Decimal(0)),
                           max_open_positions_per_trader=p.get('max_open_positions_per_trader'),
                           max_open_positions_per_instrument=p.get('max_open_positions_per_instrument'),
-                          max_margin_exposure_per_trader=p.get('max_margin_exposure_per_trader'))
+                          max_margin_exposure_per_trader=p.get('max_margin_exposure_per_trader'),
+                          max_volume_fraction_per_fill=p.get('max_volume_fraction_per_fill'))
 
   def _timed(self, announcement, label, fn):
     '''run fn(), printing announcement first and the elapsed time after,
