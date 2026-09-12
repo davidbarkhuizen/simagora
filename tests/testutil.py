@@ -296,3 +296,24 @@ def submitted_orders(orderQ):
 def submitted_close_orders(orderQ):
   '''every CloseOrder currently queued on orderQ'''
   return orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+
+
+def assert_banded_order(test, orders, buysell, price):
+  '''
+  assert orders is exactly one order in the given buysell direction,
+  with its stop_loss/take_profit straddling price on the correct sides
+  (below/above for a buy, above/below for a sell) - the shared
+  BaseStrategy.submit_banded_order contract every mean-reversion/
+  crossover-style strategy's signal tests verify, not anything
+  strategy-specific, so a single shared assertion keeps them all in
+  sync if that contract's shape ever changes
+  '''
+  test.assertEqual(len(orders), 1)
+  order = orders[0]
+  test.assertEqual(order.buysell, buysell)
+  if (buysell == 'buy'):
+    test.assertLess(order.stop_loss, price)
+    test.assertGreater(order.take_profit, price)
+  else:
+    test.assertGreater(order.stop_loss, price)
+    test.assertLess(order.take_profit, price)

@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from simagora.engine.strategy import MeanReversionStrategy
 
-from testutil import FakeDataFeed, DAY1, make_broker_and_trader, submitted_orders
+from testutil import FakeDataFeed, DAY1, make_broker_and_trader, submitted_orders, assert_banded_order
 
 
 class TestMeanReversionStrategy(unittest.TestCase):
@@ -36,11 +36,7 @@ class TestMeanReversionStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    orders = submitted_orders(orderQ)
-    self.assertEqual(len(orders), 1)
-    self.assertEqual(orders[0].buysell, 'buy')
-    self.assertLess(orders[0].stop_loss, Decimal('80'))
-    self.assertGreater(orders[0].take_profit, Decimal('80'))
+    assert_banded_order(self, submitted_orders(orderQ), 'buy', Decimal('80'))
 
   def test_sell_signal_when_overbought(self):
     datafeed, today = self.make_datafeed_with_today(Decimal('120'))
@@ -49,11 +45,7 @@ class TestMeanReversionStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    orders = submitted_orders(orderQ)
-    self.assertEqual(len(orders), 1)
-    self.assertEqual(orders[0].buysell, 'sell')
-    self.assertGreater(orders[0].stop_loss, Decimal('120'))
-    self.assertLess(orders[0].take_profit, Decimal('120'))
+    assert_banded_order(self, submitted_orders(orderQ), 'sell', Decimal('120'))
 
   def test_no_signal_within_the_band(self):
     datafeed, today = self.make_datafeed_with_today(Decimal('100'))
