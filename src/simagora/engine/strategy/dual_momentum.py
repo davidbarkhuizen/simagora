@@ -30,27 +30,12 @@ class DualMomentumStrategy(MultiInstrumentStrategy):
       # not enough trailing history anywhere yet
       return
 
-    open_by_ins = self.open_positions_by(lambda o: o.ins, lambda o: o.buysell == 'buy')
-
     leader = max(returns, key=returns.get)
+    # ABSOLUTE MOMENTUM FILTER: an empty desired set rotates fully to
+    # cash rather than holding a losing leader; otherwise the single
+    # leader is the whole desired set - already holding it is left
+    # alone, anything else open gets closed, same as every other
+    # ranking/rotation strategy's rebalance
+    desired = {leader} if (returns[leader] > 0) else set()
 
-    if (returns[leader] <= 0):
-      # ABSOLUTE MOMENTUM FILTER FAILED - rotate fully to cash
-      for positions in open_by_ins.values():
-        self.close_positions(positions, date)
-      return
-
-    if (leader in open_by_ins):
-      # already positioned in the leader - leave it running, but close
-      # any other open position left over from a since-changed leader
-      for ins, positions in open_by_ins.items():
-        if (ins != leader):
-          self.close_positions(positions, date)
-      return
-
-    # ROTATE INTO THE NEW LEADER
-    for positions in open_by_ins.values():
-      self.close_positions(positions, date)
-
-    cur_price = self.datafeed.get_price(leader, date, 'close')
-    self.submit_stop_only_order(leader, 'buy', 1, cur_price, self.stop_loss_margin, date)
+    self.rebalance_to(desired, lambda o: o.ins, self._open_long, date, filter_fn=lambda o: o.buysell == 'buy')
