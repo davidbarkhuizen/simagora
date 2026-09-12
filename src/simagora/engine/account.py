@@ -34,30 +34,37 @@ class Account(HasAutoId):
     self.d_margin_bal = {}
     self.d_net_booked_position = {}
 
-  def take_profit(self, date, pos, pdata, buysell):    
+  def _close_position(self, date, pos, price, buysell, reason):
     '''
+    close a position at an arbitrary price, banking whatever profit or
+    loss that price implies relative to the position's own execution
+    price - shared by take_profit (price = order.take_profit) and
+    close_at_price (an arbitrary strategy-issued price), which are
+    otherwise identical: free the margin, book the pnl, record it
     '''
     margin = pos.order_receipt.margin
-    order = pos.order_receipt.order
     receipt = pos.order_receipt
+    order = receipt.order
 
-    pdelta = _signed_pdelta(buysell, receipt.execution_price, order.take_profit)
+    pdelta = _signed_pdelta(buysell, receipt.execution_price, price)
 
     # free margin
     self.margin_bal -= margin
     self.cash_bal += margin
-    
-    # take profit      
-    profit = pdelta * order.quantity * order.leverage
-    self.cash_bal = self.cash_bal + profit      
-    self.net_booked_position = self.net_booked_position + profit
-    
-    # record profit
-    pos.history[date] = profit
-    pos.term_notice = TermNotice(date, order.take_profit, pos.id, 'take_profit', profit)
-    
-    # cash_bal, margin_bal, net_booked_position
-    # logging.info('%s,%s,%s,%s,%s' % (str(date), self.cash_bal, self.margin_bal, self.net_booked_position, pos.close_str()))    
+
+    # profit or loss
+    pnl = pdelta * order.quantity * order.leverage
+    self.cash_bal = self.cash_bal + pnl
+    self.net_booked_position = self.net_booked_position + pnl
+
+    # record profit/loss
+    pos.history[date] = pnl
+    pos.term_notice = TermNotice(date, price, pos.id, reason, pnl)
+
+  def take_profit(self, date, pos, pdata, buysell):
+    '''
+    '''
+    self._close_position(date, pos, pos.order_receipt.order.take_profit, buysell, 'take_profit')
 
   def stop_loss(self, date, pos, pdata, buysell):
     '''
@@ -85,27 +92,7 @@ class Account(HasAutoId):
     strategy-issued close order), banking whatever profit or loss
     that price implies relative to the position's execution price
     '''
-    margin = pos.order_receipt.margin
-    order = pos.order_receipt.order
-    receipt = pos.order_receipt
-
-    pdelta = _signed_pdelta(buysell, receipt.execution_price, price)
-
-    # free margin
-    self.margin_bal -= margin
-    self.cash_bal += margin
-
-    # profit or loss
-    pnl = pdelta * order.quantity * order.leverage
-    self.cash_bal = self.cash_bal + pnl
-    self.net_booked_position = self.net_booked_position + pnl
-
-    # record profit/loss
-    pos.history[date] = pnl
-    pos.term_notice = TermNotice(date, price, pos.id, 'closed_by_order', pnl)
-
-    # cash_bal, margin_bal, net_booked_position
-    # logging.info('%s,%s,%s,%s,%s' % (str(date), self.cash_bal, self.margin_bal, self.net_booked_position, pos.close_str()))
+    self._close_position(date, pos, price, buysell, 'closed_by_order')
 
   def handle_expiry(self, date, pos, pdata, buysell):
     '''

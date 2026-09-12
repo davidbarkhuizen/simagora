@@ -58,6 +58,10 @@ to be run from the repo root.
 - `msgq.py` — a minimal in-memory message queue used to pass orders/receipts between
   trader and broker.
 - `account.py` — per-trader cash/margin bookkeeping and P&L on position close.
+  `take_profit()` and `close_at_price()` are both just closing a position at some
+  price and banking the resulting pnl - the only difference is which price and
+  what `TermNotice` reason - so both delegate to a shared private
+  `_close_position(date, pos, price, buysell, reason)`.
 - `broker.py` — receives orders via `msgq.py` message queues, computes a fill price
   (midpoint of the day's high/low), opens/closes `Position`s, checks stop-loss/
   take-profit levels against intraday high/low, and updates account balances.
