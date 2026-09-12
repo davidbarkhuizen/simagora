@@ -33,6 +33,16 @@ class TestRowsToDicts(unittest.TestCase):
     self.assertEqual(len(dicts), 1)
     self.assertEqual(dicts[0]['date'], date(2010, 1, 1))
 
+  def test_missing_volume_and_adj_close_default_to_zero(self):
+    # only the required open/high/low/close fields present
+    rows = [['2010-01-01', '100', '105', '95', '102']]
+
+    dicts = rows_to_dicts(rows)
+
+    self.assertEqual(len(dicts), 1)
+    self.assertEqual(dicts[0]['volume'], 0)
+    self.assertEqual(dicts[0]['adj_close'], 0)
+
 
 class TestLoadCsvDataRows(unittest.TestCase):
 

@@ -14,16 +14,6 @@ def _signed_pdelta(buysell, reference_price, other_price):
   else:
     return reference_price - other_price
 
-def _pdelta_and_moneyness(buysell, reference_price, other_price):
-  '''
-  (pdelta, in_the_money): the unsigned magnitude of the price movement
-  since reference_price, and whether that movement favors the position
-  (see _signed_pdelta) - shared by handle_expiry and
-  tally_individual_open_positions, which both need "how much" and
-  "which way" as separate values
-  '''
-  signed_pdelta = _signed_pdelta(buysell, reference_price, other_price)
-  return abs(signed_pdelta), (signed_pdelta >= 0)
 
 class Account(HasAutoId):
   '''
@@ -116,13 +106,17 @@ class Account(HasAutoId):
     receipt = pos.order_receipt
 
     exit_price = self.broker.apply_exit_cost(pdata['close'], buysell)
-    _, in_the_money = _pdelta_and_moneyness(buysell, receipt.execution_price, exit_price)
+    in_the_money = _signed_pdelta(buysell, receipt.execution_price, exit_price) >= 0
     reason = 'expired in the money' if in_the_money else 'expired out of the money'
 
     self._close_position(date, pos, exit_price, buysell, reason)
 
   def tally_individual_open_positions(self, date):
     '''
+    marks each open position's still-unrealized pnl for date, off the
+    same signed-pdelta formula _close_position books a realized pnl
+    with - just against pdata['close'] instead of an actual exit price,
+    since nothing is actually closing here
     '''
     for pos in self.broker.get_open_positions_for_trader(self.trader_id):
       order = pos.order_receipt.order
@@ -136,14 +130,8 @@ class Account(HasAutoId):
         # today rather than crash on a missing close price
         continue
 
-      pdelta, in_the_money = _pdelta_and_moneyness(order.buysell, receipt.execution_price, pdata['close'])
-
-      if (in_the_money == True):
-        profit = pdelta * order.quantity * order.leverage
-        pos.history[date] = profit
-      else: # if (in_the_money == False):
-        loss = pdelta * order.quantity * order.leverage
-        pos.history[date] = (- loss)
+      pdelta = _signed_pdelta(order.buysell, receipt.execution_price, pdata['close'])
+      pos.history[date] = pdelta * order.quantity * order.leverage
 
   def record_net_end_of_day_pos(self, date):
     total = Decimal(0)
