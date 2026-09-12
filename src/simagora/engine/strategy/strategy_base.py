@@ -83,6 +83,16 @@ class MultiInstrumentStrategy(BaseStrategy):
         ranked[ins] = value
     return ranked
 
+  def rank_universe_or_none(self, metric_fn):
+    '''
+    like rank_universe(metric_fn), but None instead of an empty dict
+    when no instrument in self.universe can be scored yet - the
+    "not enough trailing history anywhere yet, skip today" guard every
+    ranking strategy's execute() needs before it can do anything else
+    '''
+    ranked = self.rank_universe(metric_fn)
+    return ranked if (len(ranked) > 0) else None
+
   def open_positions_by(self, key_fn, filter_fn=None):
     '''
     {key_fn(order): [positions]} of this trader's own currently open

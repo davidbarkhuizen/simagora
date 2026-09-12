@@ -62,7 +62,11 @@ counterpart used when a strategy trades across more than one.
 - **Shared plumbing lives on `MultiInstrumentStrategy` itself.**
   `rank_universe(metric_fn)` ({instrument: metric_fn(instrument)}, dropping
   instruments `metric_fn` returns `None` for - used by the three ranking
-  strategies above, not by `PairsTradingStrategy`), `open_positions_by(key_fn,
+  strategies above, not by `PairsTradingStrategy`), `rank_universe_or_none(metric_fn)`
+  (the same ranking, but `None` instead of an empty dict when nothing could be
+  scored yet - each ranking strategy's `execute()` starts with `if (ranked is
+  None): return`, replacing what used to be an `if (len(ranked) == 0): return`
+  duplicated identically in all three), `open_positions_by(key_fn,
   filter_fn=None)` (groups `BaseStrategy.open_positions()` by instrument, by
   `(instrument, buysell)`, or otherwise, optionally filtered - every concrete
   multi-instrument strategy uses this one), and `close_positions(positions,

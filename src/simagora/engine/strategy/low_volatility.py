@@ -21,9 +21,9 @@ class LowVolatilityStrategy(MultiInstrumentStrategy):
   stop_loss_margin = Decimal('0.05')  # 5 %
 
   def execute(self, date):
-    vols = self.rank_universe(
+    vols = self.rank_universe_or_none(
       lambda ins: self.datafeed.n_day_std_dev(ins, date, 'close', self.lookback_window_days))
-    if (len(vols) == 0):
+    if (vols is None):
       # not enough trailing history anywhere yet
       return
 
