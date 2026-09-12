@@ -28,6 +28,7 @@ A position closes the same day one of the following happens, in this order:
    current top/bottom ranking. `LowVolatilityStrategy` submits one for each open
    position whose instrument is no longer among the calmest. `PairsTradingStrategy`
    submits one for each leg of its pair once their price spread has reverted back
-   toward its own mean.
+   toward its own mean, or immediately for a lone surviving leg if the other has
+   already closed on its own (stopped out, or rejected when the pair was opened).
 
 See [Strategies](strategies.md) for details on each strategy named above.
