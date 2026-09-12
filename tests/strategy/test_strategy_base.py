@@ -1,7 +1,8 @@
 '''
 exercises the shared base-class plumbing in strategy_base.py:
-BaseStrategy.log_self, and MultiInstrumentStrategy's own
-trader.universe wiring and per-instrument dispatch
+BaseStrategy.log_self, MultiInstrumentStrategy's own trader.universe
+wiring and per-instrument dispatch, and MultiInstrumentStrategy.
+rebalance_to's own hold/close contract
 '''
 
 import unittest
@@ -11,7 +12,10 @@ from simagora.domain.order import Order
 from simagora.engine.strategy import MultiInstrumentStrategy
 from simagora.engine.trader import Trader
 
-from testutil import FakeDataFeed, FakeUniverse, DAY1, DAY2, DAY1_PRICES, make_broker, make_broker_and_trader
+from testutil import (
+  FakeDataFeed, FakeUniverse, DAY1, DAY2, DAY1_PRICES,
+  make_broker, make_broker_and_trader, make_manual_position, submitted_close_orders,
+)
 
 
 class TestStrategyLogSelf(unittest.TestCase):
@@ -94,6 +98,93 @@ class TestMultiInstrumentStrategy(unittest.TestCase):
     self.broker.execute_orders_to_open(DAY2)
     self.assertEqual(len(self.broker.open_positions), 1)
     self.assertEqual(self.broker.open_positions[0].order_receipt.order.ins, 'AAA')
+
+
+class TestRebalanceTo(unittest.TestCase):
+  '''
+  exercises MultiInstrumentStrategy.rebalance_to's own hold/close
+  contract directly - the shared mechanism behind every ranking/
+  rotation strategy (DualMomentum, CrossSectionalMomentum,
+  LowVolatility): close every open position whose key fell out of the
+  desired set, then open every desired key not already held, leaving
+  an already-held desired key alone rather than churning it. Each
+  concrete strategy's own tests cover its own ranking signal instead
+  of re-verifying this shared mechanism, which used to be checked
+  redundantly (and only indirectly, through each strategy's own
+  ranking math) in three separate places
+  '''
+
+  def setUp(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q,
+     self.broker, self.trader) = make_broker_and_trader(
+        datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+    self.strategy = MultiInstrumentStrategy(self.trader, DAY1, DAY1)
+
+  def test_holds_a_position_matching_the_desired_set_without_churn(self):
+    make_manual_position(self.broker, self.trader, 'AAA')
+    opened = []
+
+    self.strategy.rebalance_to({'AAA'}, lambda o: o.ins, lambda key, date: opened.append(key), DAY1)
+
+    self.assertEqual(submitted_close_orders(self.orderQ), [])
+    self.assertEqual(opened, [])
+
+  def test_closes_a_position_whose_key_fell_out_of_the_desired_set(self):
+    stale = make_manual_position(self.broker, self.trader, 'AAA')
+
+    self.strategy.rebalance_to(set(), lambda o: o.ins, lambda key, date: None, DAY1)
+
+    close_orders = submitted_close_orders(self.orderQ)
+    self.assertEqual([co.position_id for co in close_orders], [stale.id])
+
+  def test_opens_a_desired_key_not_already_held(self):
+    opened = []
+
+    self.strategy.rebalance_to({'AAA'}, lambda o: o.ins, lambda key, date: opened.append((key, date)), DAY1)
+
+    self.assertEqual(opened, [('AAA', DAY1)])
+
+  def test_rotates_a_stale_key_out_and_a_new_one_in_within_the_same_call(self):
+    stale = make_manual_position(self.broker, self.trader, 'BBB')
+    opened = []
+
+    self.strategy.rebalance_to({'AAA'}, lambda o: o.ins, lambda key, date: opened.append(key), DAY1)
+
+    close_orders = submitted_close_orders(self.orderQ)
+    self.assertEqual([co.position_id for co in close_orders], [stale.id])
+    self.assertEqual(opened, ['AAA'])
+
+  def test_filter_fn_excludes_positions_it_returns_false_for(self):
+    # a filter_fn like `lambda o: o.buysell == 'buy'` (as LowVolatility/
+    # DualMomentum use, to only reconcile their own long side) should
+    # exclude a short position from the reconciliation entirely, even
+    # though its key isn't in the desired set
+    make_manual_position(self.broker, self.trader, 'AAA', 'sell')
+
+    self.strategy.rebalance_to(
+      set(), lambda o: o.ins, lambda key, date: None, DAY1, filter_fn=lambda o: o.buysell == 'buy')
+
+    self.assertEqual(submitted_close_orders(self.orderQ), [])
+
+  def test_works_with_a_tuple_key_for_independent_long_and_short_sides(self):
+    # CrossSectionalMomentum's own key shape: (instrument, buysell), so
+    # a long and a short on the same instrument are tracked as
+    # independent slots rather than colliding
+    stale_long = make_manual_position(self.broker, self.trader, 'CCC', 'buy')
+    stale_short = make_manual_position(self.broker, self.trader, 'AAA', 'sell')
+    held_long = make_manual_position(self.broker, self.trader, 'AAA', 'buy')
+    opened = []
+
+    desired = {('AAA', 'buy'), ('CCC', 'sell')}
+    self.strategy.rebalance_to(
+      desired, lambda o: (o.ins, o.buysell), lambda key, date: opened.append(key), DAY1)
+
+    close_orders = submitted_close_orders(self.orderQ)
+    self.assertEqual(
+      {co.position_id for co in close_orders},
+      {stale_long.id, stale_short.id})
+    self.assertEqual(opened, [('CCC', 'sell')])  # ('AAA', 'buy') already held - left alone
 
 
 if __name__ == '__main__':
