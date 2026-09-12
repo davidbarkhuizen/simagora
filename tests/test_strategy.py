@@ -6,8 +6,8 @@ from simagora.domain.order import Order
 from simagora.domain.orderreceipt import OrderReceipt
 from simagora.domain.position import Position
 from simagora.engine.strategy import (
-  MovingAverageCrossoverStrategy, TrendFollowingStrategy, MeanReversionStrategy,
-  MultiInstrumentStrategy, DualMomentumStrategy, CrossSectionalMomentumStrategy,
+  MovingAverageCrossoverStrategy, DualMovingAverageCrossoverStrategy, TrendFollowingStrategy,
+  MeanReversionStrategy, MultiInstrumentStrategy, DualMomentumStrategy, CrossSectionalMomentumStrategy,
   LowVolatilityStrategy, DollarCostAveragingStrategy, PairsTradingStrategy,
   resolve_strategy_class,
 )
@@ -89,9 +89,74 @@ class TestStrategyLogSelf(unittest.TestCase):
       self.trader.strategy.log_self()
 
     self.assertIn(
-      'class MovingAverageCrossoverStrategy(SingleInstrumentStrategy):',
+      'class MovingAverageCrossoverStrategy(MovingAverageCrossoverBase):',
       [record.getMessage() for record in captured.records],
     )
+
+
+class _ShortLookbackDualMACrossover(DualMovingAverageCrossoverStrategy):
+  '''test-only: 2/3-day windows keep fixtures small (defaults are 50/200)'''
+  fast_window_days = 2
+  slow_window_days = 3
+
+
+class TestDualMovingAverageCrossoverStrategy(unittest.TestCase):
+  '''
+  exercises DualMovingAverageCrossoverStrategy's own fast-vs-slow
+  signal logic - close_in_the_money_positions is inherited unchanged
+  from MovingAverageCrossoverBase and already covered in depth via
+  MovingAverageCrossoverStrategy in TestStrategyCloseInTheMoneyPositions,
+  so it isn't re-tested here
+  '''
+
+  def make_datafeed_with_today(self, today_close):
+    '''3 flat days at 100, followed by one more day carrying today_close'''
+    prices = {}
+    d = DAY1
+    for i in range(3):
+      prices[d] = {'high': Decimal('100'), 'low': Decimal('100'), 'close': Decimal('100')}
+      d = d + timedelta(days=1)
+    today = d
+    prices[today] = {'high': today_close, 'low': today_close, 'close': today_close}
+    return FakeDataFeed(prices), today
+
+  def make_trader(self, today_close):
+    datafeed, today = self.make_datafeed_with_today(today_close)
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = make_broker_and_trader(
+      datafeed, Decimal('10000'), 's&p500', DAY1, today)
+    trader.strategy = _ShortLookbackDualMACrossover(trader, DAY1, today)
+    return orderQ, trader, today
+
+  def test_buy_signal_when_fast_average_crosses_above_slow(self):
+    # fast(2-day) = avg(100, 130) = 115, slow(3-day) = avg(100, 100, 130) = 110
+    orderQ, trader, today = self.make_trader(Decimal('130'))
+
+    trader.execute_strategy(today)
+
+    orders = submitted_orders(orderQ)
+    self.assertEqual(len(orders), 1)
+    self.assertEqual(orders[0].buysell, 'buy')
+    self.assertLess(orders[0].stop_loss, Decimal('130'))
+    self.assertGreater(orders[0].take_profit, Decimal('130'))
+
+  def test_sell_signal_when_fast_average_crosses_below_slow(self):
+    # fast(2-day) = avg(100, 70) = 85, slow(3-day) = avg(100, 100, 70) = 90
+    orderQ, trader, today = self.make_trader(Decimal('70'))
+
+    trader.execute_strategy(today)
+
+    orders = submitted_orders(orderQ)
+    self.assertEqual(len(orders), 1)
+    self.assertEqual(orders[0].buysell, 'sell')
+    self.assertGreater(orders[0].stop_loss, Decimal('70'))
+    self.assertLess(orders[0].take_profit, Decimal('70'))
+
+  def test_no_signal_when_fast_and_slow_averages_are_equal(self):
+    orderQ, trader, today = self.make_trader(Decimal('100'))
+
+    trader.execute_strategy(today)
+
+    self.assertEqual(len(submitted_orders(orderQ)), 0)
 
 
 class DummyMultiInstrumentStrategy(MultiInstrumentStrategy):
@@ -402,6 +467,7 @@ class TestResolveStrategyClass(unittest.TestCase):
 
   def test_known_names_resolve_to_the_matching_class(self):
     self.assertIs(resolve_strategy_class('movavg'), MovingAverageCrossoverStrategy)
+    self.assertIs(resolve_strategy_class('dualmacrossover'), DualMovingAverageCrossoverStrategy)
     self.assertIs(resolve_strategy_class('trend'), TrendFollowingStrategy)
     self.assertIs(resolve_strategy_class('meanreversion'), MeanReversionStrategy)
     self.assertIs(resolve_strategy_class('dualmomentum'), DualMomentumStrategy)

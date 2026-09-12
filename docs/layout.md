@@ -49,12 +49,16 @@ to be run from the repo root.
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
   being silently discarded.
-- `strategy/` — a package: eight strategies, one per file, all sharing
+- `strategy/` — a package: nine strategies, one per file, all sharing
   `strategy_base.py`'s `BaseStrategy` for trader/datafeed wiring, order
   submission, and `log_self()` (which now logs the concrete strategy's own
   file, via `inspect.getfile()`, rather than one shared module); split into
   `SingleInstrumentStrategy`/`MultiInstrumentStrategy` for what instrument(s)
-  they trade (see [Multi-instrument support](multi-instrument.md)). Selected
+  they trade (see [Multi-instrument support](multi-instrument.md)).
+  `MovingAverageCrossoverStrategy`/`DualMovingAverageCrossoverStrategy` further
+  share `moving_average_crossover_base.py`'s `MovingAverageCrossoverBase` for
+  their common buy/sell/close-in-the-money mechanics, differing only in what
+  "fast"/"slow" values they cross. Selected
   by name (see [Strategies](strategies.md)) via `registry.py`'s
   `STRATEGY_REGISTRY`/`resolve_strategy_class()`, which `Trader.load_strategy()`
   calls with the `strategy_name` it was constructed with. `registry.py` is a
