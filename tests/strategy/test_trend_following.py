@@ -3,14 +3,12 @@
 import unittest
 from decimal import Decimal
 
-from simagora.domain.order import Order
-from simagora.domain.orderreceipt import OrderReceipt
-from simagora.domain.position import Position
 from simagora.engine.strategy import TrendFollowingStrategy
 
 from testutil import (
   FakeDataFeed, DAY1, DAY1_PRICES,
-  make_broker_and_trader, make_flat_range_prices, submitted_orders, submitted_close_orders,
+  make_broker_and_trader, make_flat_range_prices, make_manual_position,
+  submitted_orders, submitted_close_orders,
 )
 
 
@@ -88,12 +86,8 @@ class TestTrendFollowingStrategy(unittest.TestCase):
       datafeed, Decimal('10000'), 's&p500', DAY1, breakout_date, strategy_name='trend')
 
     # a pre-existing SELL position, opposite the upcoming buy breakout
-    order = Order('s&p500', 'sell', 1, Decimal('1000'), None, DAY1)
-    order.trader_id = trader.id
-    receipt = OrderReceipt(order, 'opened', Decimal('100'), DAY1, Decimal('0'))
-    pos = Position(receipt)
-    broker.open_positions.append(pos)
-    broker.positions[pos.id] = pos
+    pos = make_manual_position(broker, trader, 's&p500', 'sell', execution_price=Decimal('100'),
+                                stop_loss=Decimal('1000'), take_profit=None)
 
     trader.execute_strategy(breakout_date)
 
