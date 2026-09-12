@@ -38,9 +38,11 @@ class Account(HasAutoId):
     '''
     close a position at an arbitrary price, banking whatever profit or
     loss that price implies relative to the position's own execution
-    price - shared by take_profit (price = order.take_profit) and
-    close_at_price (an arbitrary strategy-issued price), which are
-    otherwise identical: free the margin, book the pnl, record it
+    price - shared by every exit path (take_profit, stop_loss,
+    close_at_price, handle_expiry): free the margin, book the pnl,
+    charge the broker's flat commission_per_trade (a pure cash_bal
+    debit, unlike transaction_cost - see Broker.__init__ - so it
+    doesn't touch pnl/history/term_notice), record it
     '''
     margin = pos.order_receipt.margin
     receipt = pos.order_receipt
@@ -56,6 +58,9 @@ class Account(HasAutoId):
     pnl = pdelta * order.quantity * order.leverage
     self.cash_bal = self.cash_bal + pnl
     self.net_booked_position = self.net_booked_position + pnl
+
+    # flat per-trade commission, charged separately from pnl
+    self.cash_bal -= self.broker.commission_per_trade
 
     # record profit/loss
     pos.history[date] = pnl

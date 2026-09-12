@@ -160,7 +160,7 @@ class TestPlotCreatesMissingPlotDirectory(unittest.TestCase):
 
 class TestSimulatorThreadsBrokerConfigToBroker(unittest.TestCase):
   '''
-  transaction_cost/max_open_positions_per_trader/
+  transaction_cost/commission_per_trade/max_open_positions_per_trader/
   max_open_positions_per_instrument/max_margin_exposure_per_trader are
   all just forwarded from Simulator's own constructor straight to
   Broker's - covered together here since they'd otherwise risk ending
@@ -187,6 +187,13 @@ class TestSimulatorThreadsBrokerConfigToBroker(unittest.TestCase):
 
     self.assertEqual(sim.broker.transaction_cost, Decimal('0.05'))
 
+  def test_explicit_commission_per_trade_reaches_the_broker(self):
+    sim = Simulator(
+      'testins', ['movavg'], date(2010, 1, 1), date(2010, 1, 1), Decimal('10000'),
+      commission_per_trade=Decimal('1.50'))
+
+    self.assertEqual(sim.broker.commission_per_trade, Decimal('1.50'))
+
   def test_explicit_risk_limits_reach_the_broker(self):
     sim = Simulator(
       'testins', ['movavg'], date(2010, 1, 1), date(2010, 1, 1), Decimal('10000'),
@@ -201,6 +208,7 @@ class TestSimulatorThreadsBrokerConfigToBroker(unittest.TestCase):
     sim = Simulator('testins', ['movavg'], date(2010, 1, 1), date(2010, 1, 1), Decimal('10000'))
 
     self.assertEqual(sim.broker.transaction_cost, Decimal('0'))
+    self.assertEqual(sim.broker.commission_per_trade, Decimal('0'))
     self.assertIsNone(sim.broker.max_open_positions_per_trader)
     self.assertIsNone(sim.broker.max_open_positions_per_instrument)
     self.assertIsNone(sim.broker.max_margin_exposure_per_trader)

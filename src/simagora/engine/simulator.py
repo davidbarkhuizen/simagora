@@ -28,8 +28,9 @@ class Simulator(object):
   simulation manager
   '''  
   def __init__(self, instrument, strategies, start_date, end_date, opening_bal, time_stamp=None,
-               universe=None, transaction_cost=Decimal(0), max_open_positions_per_trader=None,
-               max_open_positions_per_instrument=None, max_margin_exposure_per_trader=None):
+               universe=None, transaction_cost=Decimal(0), commission_per_trade=Decimal(0),
+               max_open_positions_per_trader=None, max_open_positions_per_instrument=None,
+               max_margin_exposure_per_trader=None):
     '''
     constructs message queues
     initialises brokers and traders
@@ -45,11 +46,12 @@ class Simulator(object):
     `instrument` remains the "primary" instrument used for plot()'s
     single-instrument-shaped charting either way.
 
-    transaction_cost/max_open_positions_per_trader/
+    transaction_cost/commission_per_trade/max_open_positions_per_trader/
     max_open_positions_per_instrument/max_margin_exposure_per_trader
     are all forwarded to the Broker unchanged - see
-    Broker.calc_execution_price/Broker.execute_orders_to_open. Each
-    defaults to the Broker's own default (0 cost, no risk limits).
+    Broker.calc_execution_price/Broker.__init__/
+    Broker.execute_orders_to_open. Each defaults to the Broker's own
+    default (0 cost, 0 commission, no risk limits).
     '''
     self.instrument = instrument
     self.universe = universe
@@ -72,6 +74,7 @@ class Simulator(object):
 
     self.broker = Broker(self.datafeed, self.orderQ, self.receiptQ, self.term_req_Q, self.term_notice_Q,
                          transaction_cost=transaction_cost,
+                         commission_per_trade=commission_per_trade,
                          max_open_positions_per_trader=max_open_positions_per_trader,
                          max_open_positions_per_instrument=max_open_positions_per_instrument,
                          max_margin_exposure_per_trader=max_margin_exposure_per_trader)

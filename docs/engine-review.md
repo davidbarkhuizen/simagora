@@ -9,14 +9,6 @@ simplification.
 
 ## 1. Obvious logical gaps
 
-- **No separate commission/fee model.** `Broker.calc_execution_price`'s
-  `transaction_cost` and `Broker.apply_exit_cost` (used by every exit path -
-  stop-loss, take-profit, and expiry, alongside the open/explicit-close
-  fills `calc_execution_price` already covered) now apply the same flat
-  per-unit cost against every fill, open or close. There's still no
-  separate commission/fee model distinct from this spread-style cost
-  (e.g. a fixed per-trade fee, or one that scales with notional rather
-  than quantity).
 - **`Order.target_price`/`target_floor`/`target_ceiling`** are accepted in
   `Order.__init__` and stored, but never read anywhere in the codebase —
   vestigial/unused fields.
@@ -97,18 +89,16 @@ their own planned piece of work:
 
 ## Biggest bang-for-buck
 
-Add a flat per-trade commission, distinct from the existing per-unit
-`transaction_cost` spread (§1) — `Broker.calc_execution_price`/
-`apply_exit_cost` already model a price-based spread cost charged
-per-unit on every fill, but there's still no separate fixed cash fee
-charged per trade regardless of size (a real cost at small quantities,
-where a flat commission dominates a per-unit spread). Unlike
-`transaction_cost`, which moves the recorded execution/exit price
-itself, a flat commission is simplest as a direct cash deduction at
-each fill: a new optional `Broker.commission_per_trade` (default 0,
-preserving today's behavior) debited from `cash_bal` once per fill,
-alongside the existing margin sequestration on open and the margin
-release on every close path (`_close_position`, and `handle_expiry`'s
-two branches). Same shape of change as the last several rounds - an
-optional, additive parameter threaded through the same fill points
-`transaction_cost` already touches, defaulting to a no-op.
+Add an `Account`-level position-sizing primitive off `equity(date)`
+(§1) — `Account.equity(date)` already gives a single "current equity"
+figure, but nothing in the engine turns "size this trade as X% of
+equity" into an actual quantity; DollarCostAveraging/ValueAveraging
+each hand-roll their own share-count arithmetic instead. A scoped,
+additive fix: an `Account.quantity_for_equity_fraction(date, price,
+fraction, leverage=Decimal(1))` method - `floor(equity(date) * fraction
+* leverage / price)` - gives every strategy a shared, tested way to
+turn a sizing rule into a whole-unit quantity without hand-computing it
+per-strategy. Purely new surface (nothing currently calls it), so it's
+zero-risk to add; %-of-equity or volatility-targeted sizing strategies
+built afterward are a separate, later piece of (strategy-side) work
+this only unblocks.

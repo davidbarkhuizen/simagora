@@ -22,6 +22,7 @@ class Launcher(object):
     print('constructing simulator')
     self.sim = Simulator(p['ins'], p['strat'], p['start_date'], p['end_date'], p['open_bal'], self.tstamp,
                           universe=p.get('universe'), transaction_cost=p.get('transaction_cost', Decimal(0)),
+                          commission_per_trade=p.get('commission_per_trade', Decimal(0)),
                           max_open_positions_per_trader=p.get('max_open_positions_per_trader'),
                           max_open_positions_per_instrument=p.get('max_open_positions_per_instrument'),
                           max_margin_exposure_per_trader=p.get('max_margin_exposure_per_trader'))
