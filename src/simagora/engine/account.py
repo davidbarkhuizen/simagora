@@ -14,6 +14,17 @@ def _signed_pdelta(buysell, reference_price, other_price):
   else:
     return reference_price - other_price
 
+def _pdelta_and_moneyness(buysell, reference_price, other_price):
+  '''
+  (pdelta, in_the_money): the unsigned magnitude of the price movement
+  since reference_price, and whether that movement favors the position
+  (see _signed_pdelta) - shared by handle_expiry and
+  tally_individual_open_positions, which both need "how much" and
+  "which way" as separate values
+  '''
+  signed_pdelta = _signed_pdelta(buysell, reference_price, other_price)
+  return abs(signed_pdelta), (signed_pdelta >= 0)
+
 class Account(HasAutoId):
   '''
   '''
@@ -70,11 +81,10 @@ class Account(HasAutoId):
     '''
     margin = pos.order_receipt.margin
     order = pos.order_receipt.order
-    receipt = pos.order_receipt
 
     # free margin
     self.margin_bal -= margin
-    
+
     # record net loss
     self.net_booked_position = self.net_booked_position - margin    
     pos.history[date] = -margin
@@ -100,9 +110,7 @@ class Account(HasAutoId):
     order = pos.order_receipt.order
     receipt = pos.order_receipt
 
-    signed_pdelta = _signed_pdelta(buysell, receipt.execution_price, pdata['close'])
-    in_the_money = (signed_pdelta >= 0)
-    pdelta = abs(signed_pdelta)
+    pdelta, in_the_money = _pdelta_and_moneyness(buysell, receipt.execution_price, pdata['close'])
 
     reason = None
       
@@ -159,9 +167,7 @@ class Account(HasAutoId):
       
       pdata = self.broker.datafeed.get_price_info(order.ins, date)
 
-      signed_pdelta = _signed_pdelta(order.buysell, receipt.execution_price, pdata['close'])
-      in_the_money = (signed_pdelta >= 0)
-      pdelta = abs(signed_pdelta)
+      pdelta, in_the_money = _pdelta_and_moneyness(order.buysell, receipt.execution_price, pdata['close'])
 
       if (in_the_money == True):
         profit = pdelta * order.quantity * order.leverage

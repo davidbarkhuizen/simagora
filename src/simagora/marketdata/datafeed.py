@@ -1,4 +1,5 @@
 from .csvhandler import *
+from .statistics import mean, population_std_dev
 import logging
 import os
 
@@ -63,7 +64,7 @@ class DataFeed(object):
     values = self._trailing_values(date, price, n, include_current=True)
     if (len(values) == 0):
       return None
-    return sum(values) / Decimal(len(values))
+    return mean(values)
 
   def n_day_high(self, instrument, date, price, n):
     '''highest `price` over the n trading days preceding date (date itself excluded)'''
@@ -84,9 +85,7 @@ class DataFeed(object):
     values = self._trailing_values(date, price, n, include_current=True)
     if (len(values) == 0):
       return None
-    mean = sum(values) / Decimal(len(values))
-    variance = sum((v - mean) ** 2 for v in values) / Decimal(len(values))
-    return variance.sqrt()
+    return population_std_dev(values)
 
   def n_day_return(self, instrument, date, price, n):
     '''

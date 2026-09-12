@@ -28,6 +28,14 @@ class BaseStrategy(object):
     '''this trader's own currently open positions, across every instrument it might hold'''
     return self.trader.broker.get_open_positions_for_trader(self.trader.id)
 
+  def stop_loss_level(self, price, buysell, margin):
+    '''price adjusted margin against a buysell position - below price for a buy, above for a sell'''
+    return price * (1 - margin) if (buysell == 'buy') else price * (1 + margin)
+
+  def take_profit_level(self, price, buysell, margin):
+    '''price adjusted margin in favor of a buysell position - above price for a buy, below for a sell'''
+    return price * (1 + margin) if (buysell == 'buy') else price * (1 - margin)
+
   def log_self(self):
     '''log this strategy module's own source, line by line, for the run's audit trail'''
     with open(SOURCE_FILE_NAME, 'r') as f:
@@ -135,20 +143,18 @@ class MovingAverageCrossoverStrategy(SingleInstrumentStrategy):
 
     if (cur_price > mavg): # +- tolerance
       # SUBMIT NEW BUY ORDER
-      stop_loss_level = cur_price * (1 - self.stop_loss_margin)
-      take_profit_level = cur_price * (1 + self.take_profit_margin)
-
-      buy_order = Order(ins, 'buy', 1, stop_loss_level, take_profit_level, date)
+      buy_order = Order(ins, 'buy', 1,
+        self.stop_loss_level(cur_price, 'buy', self.stop_loss_margin),
+        self.take_profit_level(cur_price, 'buy', self.take_profit_margin), date)
       self.submit_order(buy_order)
 
       # CLOSE OUT EXISTING IN THE MONEY BUY POSITIONS
       self.close_in_the_money_positions(date, 'buy')
     elif (cur_price < mavg):
       # SUBMIT NEW SELL ORDER
-      stop_loss_level = cur_price * (1 + self.stop_loss_margin)
-      take_profit_level = cur_price * (1 - self.take_profit_margin)
-
-      sell_order = Order(ins, 'sell', 1, stop_loss_level, take_profit_level, date)
+      sell_order = Order(ins, 'sell', 1,
+        self.stop_loss_level(cur_price, 'sell', self.stop_loss_margin),
+        self.take_profit_level(cur_price, 'sell', self.take_profit_margin), date)
       self.submit_order(sell_order)
 
       # CLOSE OUT EXISTING IN THE MONEY SELL POSITIONS
@@ -249,17 +255,15 @@ class MeanReversionStrategy(SingleInstrumentStrategy):
 
     if (cur_price < lower_band):
       # oversold - bet on a bounce back up
-      stop_loss_level = cur_price * (1 - self.stop_loss_margin)
-      take_profit_level = cur_price * (1 + self.take_profit_margin)
-
-      buy_order = Order(ins, 'buy', 1, stop_loss_level, take_profit_level, date)
+      buy_order = Order(ins, 'buy', 1,
+        self.stop_loss_level(cur_price, 'buy', self.stop_loss_margin),
+        self.take_profit_level(cur_price, 'buy', self.take_profit_margin), date)
       self.submit_order(buy_order)
     elif (cur_price > upper_band):
       # overbought - bet on a pullback down
-      stop_loss_level = cur_price * (1 + self.stop_loss_margin)
-      take_profit_level = cur_price * (1 - self.take_profit_margin)
-
-      sell_order = Order(ins, 'sell', 1, stop_loss_level, take_profit_level, date)
+      sell_order = Order(ins, 'sell', 1,
+        self.stop_loss_level(cur_price, 'sell', self.stop_loss_margin),
+        self.take_profit_level(cur_price, 'sell', self.take_profit_margin), date)
       self.submit_order(sell_order)
 
 
@@ -314,8 +318,7 @@ class DualMomentumStrategy(MultiInstrumentStrategy):
       self.close_positions(positions, date)
 
     cur_price = self.datafeed.get_price(leader, date, 'close')
-    stop_loss_level = cur_price * (1 - self.stop_loss_margin)
-    buy_order = Order(leader, 'buy', 1, stop_loss_level, None, date)
+    buy_order = Order(leader, 'buy', 1, self.stop_loss_level(cur_price, 'buy', self.stop_loss_margin), None, date)
     self.submit_order(buy_order)
 
 
@@ -369,9 +372,7 @@ class CrossSectionalMomentumStrategy(MultiInstrumentStrategy):
       if ((ins, buysell) in open_by_key):
         continue
       cur_price = self.datafeed.get_price(ins, date, 'close')
-      margin = (1 - self.stop_loss_margin) if (buysell == 'buy') else (1 + self.stop_loss_margin)
-      stop_loss_level = cur_price * margin
-      order = Order(ins, buysell, 1, stop_loss_level, None, date)
+      order = Order(ins, buysell, 1, self.stop_loss_level(cur_price, buysell, self.stop_loss_margin), None, date)
       self.submit_order(order)
 
 
@@ -443,8 +444,7 @@ class LowVolatilityStrategy(MultiInstrumentStrategy):
       if (ins in open_by_ins):
         continue
       cur_price = self.datafeed.get_price(ins, date, 'close')
-      stop_loss_level = cur_price * (1 - self.stop_loss_margin)
-      order = Order(ins, 'buy', 1, stop_loss_level, None, date)
+      order = Order(ins, 'buy', 1, self.stop_loss_level(cur_price, 'buy', self.stop_loss_margin), None, date)
       self.submit_order(order)
 
 
@@ -508,8 +508,8 @@ class PairsTradingStrategy(MultiInstrumentStrategy):
     long_price = self.datafeed.get_price(long_ins, date, 'close')
     short_price = self.datafeed.get_price(short_ins, date, 'close')
 
-    long_stop = long_price * (1 - self.stop_loss_margin)
-    short_stop = short_price * (1 + self.stop_loss_margin)
+    long_stop = self.stop_loss_level(long_price, 'buy', self.stop_loss_margin)
+    short_stop = self.stop_loss_level(short_price, 'sell', self.stop_loss_margin)
 
     self.submit_order(Order(long_ins, 'buy', 1, long_stop, None, date))
     self.submit_order(Order(short_ins, 'sell', 1, short_stop, None, date))

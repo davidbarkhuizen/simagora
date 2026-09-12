@@ -7,6 +7,10 @@ from simagora.engine.broker import Broker
 from simagora.engine.msgq import MsgQ
 from simagora.engine.trader import Trader
 from simagora.domain.order import Order
+from simagora.domain.orderreceipt import OrderReceipt
+from simagora.domain.position import Position
+from simagora.marketdata.universe import SpreadStatsMixin
+from simagora.marketdata.statistics import mean, population_std_dev
 
 
 DAY1 = date(2010, 1, 1)
@@ -34,7 +38,7 @@ class FakeDataFeed(object):
     values = self._trailing_values(d, field, n, include_current=True)
     if (len(values) == 0):
       return None
-    return sum(values) / Decimal(len(values))
+    return mean(values)
 
   def n_day_high(self, instrument, d, field, n):
     values = self._trailing_values(d, field, n, include_current=False)
@@ -52,9 +56,7 @@ class FakeDataFeed(object):
     values = self._trailing_values(d, field, n, include_current=True)
     if (len(values) == 0):
       return None
-    mean = sum(values) / Decimal(len(values))
-    variance = sum((v - mean) ** 2 for v in values) / Decimal(len(values))
-    return variance.sqrt()
+    return population_std_dev(values)
 
   def n_day_return(self, instrument, d, field, n):
     today_value = self._value_n_days_before(d, field, 0)
@@ -95,11 +97,14 @@ class FakeDataFeed(object):
     return list(reversed(window))
 
 
-class FakeUniverse(object):
+class FakeUniverse(SpreadStatsMixin):
   '''
   minimal multi-instrument stand-in for Universe: one FakeDataFeed per
   instrument, dispatched by the `instrument` argument every method
-  already takes - mirrors Universe's own real DataFeed dispatch
+  already takes - mirrors Universe's own real DataFeed dispatch.
+  Inherits SpreadStatsMixin's spread/n_day_spread_moving_avg/
+  n_day_spread_std_dev unchanged from Universe, since that math only
+  depends on get_price/trailing_dates, already identical on both.
   '''
 
   def __init__(self, feeds_by_instrument):
@@ -132,35 +137,6 @@ class FakeUniverse(object):
   def trailing_dates(self, instrument, d, n, include_current):
     return self._feed_for(instrument).trailing_dates(d, n, include_current)
 
-  def spread(self, instrument_a, instrument_b, d, field):
-    a = self.get_price(instrument_a, d, field)
-    b = self.get_price(instrument_b, d, field)
-    if (a is None) or (b is None):
-      return None
-    return a - b
-
-  def n_day_spread_moving_avg(self, instrument_a, instrument_b, d, field, n):
-    values = self._trailing_spread_values(instrument_a, instrument_b, d, field, n)
-    if (len(values) == 0):
-      return None
-    return sum(values) / Decimal(len(values))
-
-  def n_day_spread_std_dev(self, instrument_a, instrument_b, d, field, n):
-    values = self._trailing_spread_values(instrument_a, instrument_b, d, field, n)
-    if (len(values) == 0):
-      return None
-    mean = sum(values) / Decimal(len(values))
-    variance = sum((v - mean) ** 2 for v in values) / Decimal(len(values))
-    return variance.sqrt()
-
-  def _trailing_spread_values(self, instrument_a, instrument_b, d, field, n):
-    values = []
-    for dd in self.trailing_dates(instrument_a, d, n, include_current=True):
-      s = self.spread(instrument_a, instrument_b, dd, field)
-      if (s is not None):
-        values.append(s)
-    return values
-
   def date_is_trading_day(self, d):
     return any(feed.get_price_info(None, d) is not None for feed in self.feeds.values())
 
@@ -182,6 +158,28 @@ def make_broker_and_trader(datafeed, opening_bal, instrument, start_date, end_da
   return orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader
 
 
+def make_multi_instrument_trader(prices_by_ins, strategy_class, instrument=None, universe=None,
+                                  start_date=DAY1, end_date=DAY2, opening_bal=Decimal('10000')):
+  '''
+  (orderQ, broker, trader) wired up with a FakeUniverse built from
+  prices_by_ins ({instrument: {date: price_info}}), and trader.strategy
+  swapped for strategy_class(trader, start_date, end_date) - shared by
+  every MultiInstrumentStrategy test class in test_strategy.py, whose
+  own make_trader() typically wraps this for its own fixture-shape
+  convenience (e.g. building prices_by_ins from two separate
+  positional price dicts)
+  '''
+  universe = universe if (universe is not None) else list(prices_by_ins.keys())
+  instrument = instrument if (instrument is not None) else universe[0]
+  universe_feed = FakeUniverse({ins: FakeDataFeed(prices) for ins, prices in prices_by_ins.items()})
+
+  (orderQ, receiptQ, term_req_Q, term_notice_Q, broker) = make_broker(universe_feed)
+  trader = Trader(
+    universe_feed, broker, opening_bal, instrument, None, start_date, end_date, universe=universe)
+  trader.strategy = strategy_class(trader, start_date, end_date)
+  return orderQ, broker, trader
+
+
 def open_position(trader, broker, day, buysell='buy', quantity=1,
                    stop_loss=Decimal('90'), take_profit=Decimal('110'),
                    ins='s&p500', expiry_date=None):
@@ -195,3 +193,21 @@ def open_position(trader, broker, day, buysell='buy', quantity=1,
   trader.submit_order(order)
   broker.execute_orders_to_open(day)
   return broker.open_positions[-1]
+
+
+def make_manual_position(broker, trader, ins, buysell='buy', execution_price=Decimal('100')):
+  '''
+  build a Position directly and append it to broker's open_positions,
+  bypassing execute_orders_to_open's cash/margin bookkeeping entirely -
+  for tests that need to inject an already-open position (at a precise
+  execution price, or owned by a specific trader) without caring about
+  the order's own stop_loss/take_profit, which are arbitrary
+  placeholder values here, never read by any test using this helper
+  '''
+  order = Order(ins, buysell, 1, Decimal('1'), Decimal('1000'), DAY1)
+  order.trader_id = trader.id
+  receipt = OrderReceipt(order, 'opened', execution_price, DAY1, Decimal('0'))
+  pos = Position(receipt)
+  broker.open_positions.append(pos)
+  broker.positions[pos.id] = pos
+  return pos
