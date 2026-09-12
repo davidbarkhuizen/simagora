@@ -9,9 +9,6 @@ simplification.
 
 ## 1. Obvious logical gaps
 
-- **`Order.target_price`/`target_floor`/`target_ceiling`** are accepted in
-  `Order.__init__` and stored, but never read anywhere in the codebase —
-  vestigial/unused fields.
 - **`adj_close` is parsed but never consumed.** `csvhandler.row_to_dict`
   extracts it from every CSV row, but nothing in `DataFeed`/`Universe`/any
   strategy ever reads it — split/dividend-adjusted pricing (corporate
@@ -72,25 +69,28 @@ rewrite - none outstanding right now; `Simulator.report_performance()`
 
 ## Quick fixes
 
-None outstanding right now — the one entry here (removing
-`Order.target_price`/`target_floor`/`target_ceiling`) is promoted to
-"Biggest bang-for-buck" below, since nothing smaller/lower-risk is left
-queued behind it.
+None outstanding.
 
 ## Biggest bang-for-buck
 
-Remove `Order.target_price`/`target_floor`/`target_ceiling` (§1) —
-accepted in `Order.__init__` and stored, but never read anywhere in the
-codebase, and nothing currently constructs an `Order` expecting them to
-do anything. Every other well-scoped, additive engine-level gap this
-review originally flagged has now been closed (transaction cost on
-every exit path, stop-loss slippage, net margin exposure, performance
-stats surfaced from a real run, missing output directories, a flat
-commission, and now `Account.quantity_for_equity_fraction`); what's
-left in §1 (a fee model beyond a flat commission, corporate-actions
-pricing, margin calls/leverage limits, new order types) each represents
-a real design decision rather than a small additive change. This
-vestigial-field removal is the only remaining item small enough to
-still call "biggest bang-for-buck" - a straight deletion, not a design
-question - so it's promoted here rather than left to languish under
-"Quick fixes."
+Every remaining §1 item from here on is a real design decision, not a
+small additive change - this review has run out of "wire up plumbing
+that already exists but nothing calls yet" candidates (transaction cost
+on every exit path, stop-loss slippage, net margin exposure, a flat
+commission, `Account.quantity_for_equity_fraction`, and now the last
+vestigial-field cleanup are all done). The best-scoped remaining slice
+of a bigger item: add the in-place `stop_loss`-tightening primitive §2
+already notes is missing (`ATRTrendFollowingStrategy`'s docstring: "the
+engine has no in-place `stop_loss` update mechanism"), e.g. a
+`Broker.tighten_stop_loss(position, new_stop_loss)` that validates the
+new level is strictly more conservative than the current one (closer to
+the position's own execution price, on the position's own side of it)
+before mutating `order.stop_loss` in place. Safe with no margin
+recalculation needed, since tightening a stop only ever reduces the
+loss already covered by the margin reserved at entry - and it directly
+unblocks chandelier-style trailing stops for `ATRTrendFollowingStrategy`
+(a strategy-side change, still someone else's later work) without
+touching margin/risk accounting at all. Genuinely smaller in scope than
+"order types are a fixed shape" as a whole, but still a real new engine
+capability rather than a pure refactor - expect this round to look
+different in kind from the last several.
