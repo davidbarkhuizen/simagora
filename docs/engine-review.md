@@ -62,12 +62,6 @@ rewrite - none outstanding right now; `Simulator.report_performance()`
   (slippage that grows with fill size); this engine's execution price
   doesn't reflect that at all, for either a single large fill or several
   traders' combined same-day flow.
-- **No netting**: each `Order` always creates a new independent `Position`,
-  even for the same instrument+direction already held by the same trader —
-  consistent throughout (`open_positions_by`, `close_in_the_money_positions`,
-  etc.), so this is a deliberate lot-based model, not an oversight, but
-  worth naming since a portfolio-level "aggregate exposure per instrument"
-  view doesn't exist without walking `open_positions` yourself.
 
 ## Quick fixes
 
