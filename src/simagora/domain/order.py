@@ -15,25 +15,26 @@ class Order(HasAutoId):
     trader_id = None,
     target_price = None,
     target_floor = None,
-    target_ceiling = None
+    target_ceiling = None,
+    leverage = Decimal(1)
     ):
     '''
     '''
     self.id = Order.new_id()
     self.trader_id = trader_id
-    
+
     self.ins = ins
     self.buysell = buysell
     self.quantity = Decimal(quantity)
-    
+
     self.stop_loss = stop_loss
     self.take_profit = take_profit
-    
+
     self.issue_date = issue_date
     self.expiry_date = expiry_date
-    
-    self.leverage = Decimal(1)
-    
+
+    self.leverage = Decimal(leverage)
+
     self.target_price = target_price
     self.target_floor = target_floor
     self.target_ceiling = target_ceiling    

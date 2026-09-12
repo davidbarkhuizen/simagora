@@ -17,11 +17,6 @@ simplification.
   the day's low actually gapped past the stop level. Real stop orders can
   execute worse than their trigger in a fast market; here the loss is
   capped by construction.
-- **`Order.leverage` is dead-ended.** All P&L/margin math throughout
-  `Account`/`Broker` is written generically against `order.leverage`, but
-  `Order.__init__` hardcodes `self.leverage = Decimal(1)` with no
-  constructor parameter to set it — leverage is fully plumbed through but
-  currently unreachable.
 - **`Order.target_price`/`target_floor`/`target_ceiling`** are accepted in
   `Order.__init__` and stored, but never read anywhere in the codebase —
   vestigial/unused fields.
@@ -83,8 +78,11 @@ rewrite:
   gross/net exposure, per-instrument or per-trader position limits) —
   `Broker`/`Account` already have all the bookkeeping these would read
   from; there's just no gate that consults it before opening.
-- **Wiring up `Order.leverage`** (accept it as a constructor parameter)
-  would activate an already-implemented code path for free.
+- ~~**Wiring up `Order.leverage`**~~ Done: `Order.__init__` now accepts an
+  optional `leverage` parameter (defaults to `1`, coerced to `Decimal` like
+  `quantity`), activating the already-generic P&L/margin math in
+  `Account`/`Broker`. No strategy passes a non-default value yet - this
+  only makes leverage reachable, not used.
 
 ## 4. Genuine engine-level edge cases worth flagging
 
@@ -112,9 +110,11 @@ rewrite:
 ~~An `Account.equity()` accessor plus a small stats module (Sharpe/drawdown/
 CAGR off the data already being tracked)~~ — done, see §3. ~~Wire up
 `Account.closed_trades` so win rate and average win/loss can be added to
-`stats.py`~~ — also done, see §3. All four were additive and touched no
-existing bookkeeping logic.
+`stats.py`~~ — also done, see §3. ~~Wiring up `Order.leverage`~~ — also
+done, see §3. All five were additive and touched no existing bookkeeping
+logic.
 
-Next candidate: wiring up `Order.leverage` (§3) — it activates an
-already-implemented code path for free, and would let `stats.py`'s new
-per-trade metrics be exercised against leveraged, not just 1x, positions.
+Next candidate: transaction cost modeling (§3) — an optional cost
+parameter on `Broker.calc_execution_price`/`_calc_execution_price_or_reject`
+would make every backtest's P&L (and the `stats.py` metrics computed from
+it) reflect the cost of trading, not just its cost-free upside.
