@@ -65,9 +65,11 @@ to be run from the repo root.
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
   being silently discarded.
-- `strategy.py` — three strategies, all sharing `BaseStrategy` for trader/datafeed
-  wiring, order submission, and `log_self()`. Selected by name (see Strategies below)
-  via `STRATEGY_REGISTRY`/`resolve_strategy_class()`, which `Trader.load_strategy()`
+- `strategy.py` — four strategies, all sharing `BaseStrategy` for trader/datafeed
+  wiring, order submission, and `log_self()`; split into `SingleInstrumentStrategy`/
+  `MultiInstrumentStrategy` for what instrument(s) they trade (see Multi-instrument
+  support below). Selected by name (see Strategies below) via
+  `STRATEGY_REGISTRY`/`resolve_strategy_class()`, which `Trader.load_strategy()`
   calls with the `strategy_name` it was constructed with.
 - `simulator.py` — drives the day-by-day simulation loop between a start and end date.
 
@@ -144,15 +146,27 @@ below) — each element is a registry name, looked up in `strategy.STRATEGY_REGI
   average (oversold), sell when it rises the same distance above it (overbought),
   each with fixed 1%/2% stop-loss/take-profit bands. No position-management beyond
   that — a reversion trade is meant to be quick.
+- **`'dualmomentum'`** — `DualMomentumStrategy`, the one multi-instrument strategy
+  (`MultiInstrumentStrategy`, trades across `trader.universe`). An
+  Antonacci-style rotation: ranks `trader.universe` by trailing 20-day return
+  (relative momentum) each day and holds a single long position in the leader,
+  but only while the leader's own return is positive (absolute momentum filter) —
+  otherwise it closes out to cash rather than holding a losing leader. Re-evaluated
+  daily rather than the classic monthly rebalance, but a leader already held is
+  left alone (no churn) until the ranking actually changes. No fixed take-profit —
+  a position exits on a leader change or the absolute-momentum filter tripping —
+  but every buy still carries a protective 5% `stop_loss_margin`, since
+  `Broker.execute_orders_to_open` requires a `stop_loss` on every order to size
+  margin.
 
 An unrecognized name raises `ValueError` rather than silently falling back to a
 default, so a typo doesn't quietly run the wrong strategy; `None` (what every
 `Trader`-constructing test in this repo passes, since they don't care which
 strategy loads) resolves to `'movavg'`.
 
-All three strategies above are single-instrument (`SingleInstrumentStrategy` reads
-`trader.instrument`). No multi-instrument strategy is implemented yet — see
-Multi-instrument support below for the plumbing that's in place for one.
+The first three strategies above are single-instrument (`SingleInstrumentStrategy`
+reads `trader.instrument`); `DualMomentumStrategy` is the one multi-instrument
+strategy — see Multi-instrument support below for the plumbing it's built on.
 
 ## Multi-instrument support
 
@@ -196,19 +210,17 @@ was handed.
   `BaseStrategy` itself no longer knows about instruments at all — just the shared
   trader/datafeed wiring, order submission, and `log_self()`. It's split into
   `SingleInstrumentStrategy` (sets `self.instrument = trader.instrument`) and
-  `MultiInstrumentStrategy` (sets `self.universe = trader.universe`); the three
-  concrete strategies above all inherit from `SingleInstrumentStrategy`.
+  `MultiInstrumentStrategy` (sets `self.universe = trader.universe`); the first
+  three concrete strategies above all inherit from `SingleInstrumentStrategy`.
   `DataFeed`/`Universe`'s `n_day_return(instrument, date, price, n)` gives a
   multi-instrument strategy the point-in-time lookback return it needs (e.g. to
   rank instruments by momentum) that the other `n_day_*` window aggregates don't
   provide.
 
-What's still needed before an actual multi-instrument strategy can be written:
-nothing structural — a concrete strategy just needs to subclass
-`MultiInstrumentStrategy`, iterate `self.universe`, and call `self.datafeed`
-per-instrument (see `tests/test_strategy.py`'s `TestMultiInstrumentStrategy` for a
-worked example). None is implemented yet (e.g. a dual-momentum strategy that ranks
-`self.universe` by `n_day_return` and buys the leader).
+- **`DualMomentumStrategy`** (see Strategies above) is the first concrete strategy
+  built on this: it subclasses `MultiInstrumentStrategy`, ranks `self.universe` by
+  `self.datafeed.n_day_return(...)` each day, and rotates its single long position
+  into the leader.
 
 ## Position closing
 
@@ -226,7 +238,9 @@ A position closes the same day one of the following happens, in this order:
    new same-direction signal fires; `TrendFollowingStrategy` submits one for each of
    its own open positions in the *opposite* direction whenever a fresh breakout
    fires. Either way this happens rather than leaving the position to run until
-   stop-loss/take-profit/expiry.
+   stop-loss/take-profit/expiry. `DualMomentumStrategy` submits one whenever the
+   leader changes (rotating out of the old one) or the absolute-momentum filter
+   trips (rotating fully to cash).
 
 ## Setup
 

@@ -8,7 +8,7 @@ from simagora.domain.orderreceipt import OrderReceipt
 from simagora.domain.position import Position
 from simagora.engine.strategy import (
   MovingAverageCrossoverStrategy, TrendFollowingStrategy, MeanReversionStrategy,
-  MultiInstrumentStrategy, resolve_strategy_class,
+  MultiInstrumentStrategy, DualMomentumStrategy, resolve_strategy_class,
 )
 from simagora.engine.trader import Trader
 
@@ -163,12 +163,109 @@ class TestMultiInstrumentStrategy(unittest.TestCase):
     self.assertEqual(self.broker.open_positions[0].order_receipt.order.ins, 'AAA')
 
 
+class _ShortLookbackDualMomentum(DualMomentumStrategy):
+  '''test-only: a 1-day lookback keeps fixtures small (default is 20)'''
+  lookback_window_days = 1
+
+
+class TestDualMomentumStrategy(unittest.TestCase):
+  '''
+  exercises DualMomentumStrategy end-to-end through a real Trader, with
+  a FakeUniverse standing in for Universe - AAA/BBB fixtures are set up
+  per test so day2's relative ranking (and, in some tests, day1's
+  as well) is whatever that test needs
+  '''
+
+  def make_trader(self, aaa_prices, bbb_prices, end_date=DAY2):
+    aaa = FakeDataFeed(aaa_prices)
+    bbb = FakeDataFeed(bbb_prices)
+    universe_feed = FakeUniverse({'AAA': aaa, 'BBB': bbb})
+
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker) = make_broker(universe_feed)
+    trader = Trader(
+      universe_feed, broker, Decimal('10000'), 'AAA', None, DAY1, end_date,
+      universe=['AAA', 'BBB'])
+    trader.strategy = _ShortLookbackDualMomentum(trader, DAY1, end_date)
+    return orderQ, broker, trader
+
+  def make_manual_position(self, broker, trader, ins, execution_price=Decimal('100')):
+    order = Order(ins, 'buy', 1, Decimal('1'), None, DAY1)
+    order.trader_id = trader.id
+    receipt = OrderReceipt(order, 'opened', execution_price, DAY1, Decimal('0'))
+    pos = Position(receipt)
+    broker.open_positions.append(pos)
+    broker.positions[pos.id] = pos
+    return pos
+
+  def test_no_signal_without_enough_preceding_history(self):
+    # DAY1 has no preceding day, so n_day_return is None for both
+    orderQ, broker, trader = self.make_trader(
+      {DAY1: {'close': Decimal('100')}}, {DAY1: {'close': Decimal('100')}}, end_date=DAY1)
+
+    trader.execute_strategy(DAY1)  # must not raise
+
+    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+
+  def test_buys_the_leader_when_it_has_positive_momentum(self):
+    orderQ, broker, trader = self.make_trader(
+      {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('110')}},   # +10%
+      {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('102')}})   # +2%
+
+    trader.execute_strategy(DAY2)
+
+    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    self.assertEqual(len(orders), 1)
+    self.assertEqual(orders[0].ins, 'AAA')
+    self.assertEqual(orders[0].buysell, 'buy')
+    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))), 0)
+
+  def test_absolute_momentum_filter_blocks_a_negative_leader_and_closes_out_to_cash(self):
+    # BBB is the relative leader (-5% beats -10%) but still negative
+    orderQ, broker, trader = self.make_trader(
+      {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('90')}},   # -10%
+      {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('95')}})   # -5%
+    pos = self.make_manual_position(broker, trader, 'BBB')
+
+    trader.execute_strategy(DAY2)
+
+    close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    self.assertEqual([co.position_id for co in close_orders], [pos.id])
+    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+
+  def test_holds_the_leader_without_churn_when_it_is_unchanged(self):
+    orderQ, broker, trader = self.make_trader(
+      {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('110')}},   # +10%, still leader
+      {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('102')}})   # +2%
+    self.make_manual_position(broker, trader, 'AAA')
+
+    trader.execute_strategy(DAY2)
+
+    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))), 0)
+
+  def test_rotates_out_of_the_old_leader_into_the_new_one(self):
+    orderQ, broker, trader = self.make_trader(
+      {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('110')}},   # +10%, new leader
+      {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('102')}})   # +2%
+    pos = self.make_manual_position(broker, trader, 'BBB')  # yesterday's leader
+
+    trader.execute_strategy(DAY2)
+
+    close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    self.assertEqual([co.position_id for co in close_orders], [pos.id])
+
+    new_orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    self.assertEqual(len(new_orders), 1)
+    self.assertEqual(new_orders[0].ins, 'AAA')
+
+
 class TestResolveStrategyClass(unittest.TestCase):
 
   def test_known_names_resolve_to_the_matching_class(self):
     self.assertIs(resolve_strategy_class('movavg'), MovingAverageCrossoverStrategy)
     self.assertIs(resolve_strategy_class('trend'), TrendFollowingStrategy)
     self.assertIs(resolve_strategy_class('meanreversion'), MeanReversionStrategy)
+    self.assertIs(resolve_strategy_class('dualmomentum'), DualMomentumStrategy)
 
   def test_none_resolves_to_the_default(self):
     self.assertIs(resolve_strategy_class(None), MovingAverageCrossoverStrategy)
@@ -183,6 +280,17 @@ class TestResolveStrategyClass(unittest.TestCase):
       make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1, strategy_name='trend')
 
     self.assertIsInstance(trader.strategy, TrendFollowingStrategy)
+
+  def test_trader_loads_a_multi_instrument_strategy_by_name_too(self):
+    # a plain FakeDataFeed works fine here - universe defaults to
+    # [instrument], and DualMomentumStrategy dispatches every
+    # instrument in self.universe through self.datafeed regardless
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1, strategy_name='dualmomentum')
+
+    self.assertIsInstance(trader.strategy, DualMomentumStrategy)
+    self.assertEqual(trader.strategy.universe, ['s&p500'])
 
 
 class TestTrendFollowingStrategy(unittest.TestCase):
