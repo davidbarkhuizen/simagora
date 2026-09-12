@@ -21,23 +21,32 @@ class DataFeed(object):
         return i
     return -1
 
-  def _trailing_values(self, date, price, n, include_current):
+  def _trailing_indices(self, date, n, include_current):
     '''
-    up to n values of `price`, trading days only, ending at date.
+    up to n self.feed indices, trading days only, ending at date.
     include_current=True includes date's own bar (day 1 of the n);
     include_current=False starts from the day before date instead -
     needed for a breakout/extreme check, where date's own bar would
-    otherwise always be part of (and so never exceed) its own extreme
+    otherwise always be part of (and so never exceed) its own extreme.
+    Shared by _trailing_values and trailing_dates.
     '''
     j = self._index_of(date)
     start = j if include_current else (j - 1)
+    return [idx for idx in (start - i for i in range(n)) if (idx >= 0)]
 
-    values = []
-    for i in range(n):
-      idx = start - i
-      if (idx >= 0):
-        values.append(self.feed[idx][price])
-    return values
+  def trailing_dates(self, date, n, include_current):
+    '''
+    dates for the same trailing trading-day slots as _trailing_indices,
+    for a caller that needs the actual dates rather than this
+    instrument's own price values - e.g. Universe walking one
+    instrument's calendar to build a cross-instrument spread series
+    over the same window
+    '''
+    return [self.feed[idx]['date'] for idx in self._trailing_indices(date, n, include_current)]
+
+  def _trailing_values(self, date, price, n, include_current):
+    '''up to n values of `price` for the trailing window described by _trailing_indices'''
+    return [self.feed[idx][price] for idx in self._trailing_indices(date, n, include_current)]
 
   def _value_n_days_before(self, date, price, n):
     '''value of `price` n trading days before date (n=0 is date's own value); None if unavailable'''
