@@ -25,8 +25,6 @@ Run from the repo root (or wherever you want `data/`, `log/`, and `plot/` resolv
 relative to) after completing [Setup](setup.md). `go()` writes a run log to `log/`
 and a result plot (via matplotlib) to `plot/` — both directories are checked into
 the repo (empty, via `.gitkeep`) so this works out of the box; only a populated
-data root (see [Data](data.md)) is required. The snippet above was run end-to-end
-against a synthetic CSV fixture, from both an editable install and a
-`PYTHONPATH=src` invocation, to confirm it works before writing this section.
+data root (see [Data](data.md)) is required.
 
 See [Strategies](strategies.md) for the full list of registered strategy names.
