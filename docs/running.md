@@ -21,6 +21,9 @@ Launcher().go({
   # 'transaction_cost': Decimal('0'),  # optional flat per-unit cost, charged
                                         # against both legs of a round trip -
                                         # see Layout's broker.py; defaults to 0
+  # 'max_open_positions_per_trader': None,      # optional portfolio risk limits -
+  # 'max_open_positions_per_instrument': None,  # see Layout's broker.py; each
+  # 'max_margin_exposure_per_trader': None,     # defaults to None (unlimited)
 })
 ```
 

@@ -9,11 +9,19 @@ from ..domain.position import Position
 
 class Broker(object):  
   
-  def __init__(self, datafeed, orderQ, receiptQ, term_req_Q, term_notice_Q, transaction_cost=Decimal(0)):
+  def __init__(self, datafeed, orderQ, receiptQ, term_req_Q, term_notice_Q, transaction_cost=Decimal(0),
+               max_open_positions_per_trader=None, max_open_positions_per_instrument=None,
+               max_margin_exposure_per_trader=None):
     '''
     transaction_cost: a flat per-unit cost (in price terms) charged
     against every fill's execution price - see calc_execution_price.
     Defaults to 0, the original cost-free execution assumption.
+
+    max_open_positions_per_trader/max_open_positions_per_instrument/
+    max_margin_exposure_per_trader: optional portfolio-level risk
+    limits consulted by execute_orders_to_open before it opens a new
+    position - see there. Each defaults to None (no limit), preserving
+    the original unconstrained-opening behavior.
     '''
     self.datafeed = datafeed
 
@@ -23,6 +31,10 @@ class Broker(object):
     self.term_notice_Q = term_notice_Q
 
     self.transaction_cost = transaction_cost
+
+    self.max_open_positions_per_trader = max_open_positions_per_trader
+    self.max_open_positions_per_instrument = max_open_positions_per_instrument
+    self.max_margin_exposure_per_trader = max_margin_exposure_per_trader
 
     self.traders = {}
     
@@ -56,7 +68,29 @@ class Broker(object):
     from self.open_positions
     '''
     return [x for x in self.open_positions if (x.order_receipt.order.trader_id == trader_id)]
-    
+
+  def _exceeds_max_open_positions_per_trader(self, order):
+    '''True if opening order would put its trader over max_open_positions_per_trader (no limit if None)'''
+    if (self.max_open_positions_per_trader is None):
+      return False
+    return len(self.get_open_positions_for_trader(order.trader_id)) >= self.max_open_positions_per_trader
+
+  def _exceeds_max_open_positions_per_instrument(self, order):
+    '''True if opening order would put its trader over max_open_positions_per_instrument for order.ins (no limit if None)'''
+    if (self.max_open_positions_per_instrument is None):
+      return False
+    same_instrument = [
+      p for p in self.get_open_positions_for_trader(order.trader_id)
+      if (p.order_receipt.order.ins == order.ins)
+    ]
+    return len(same_instrument) >= self.max_open_positions_per_instrument
+
+  def _exceeds_max_margin_exposure_per_trader(self, trader, margin):
+    '''True if this order's margin would put its trader over max_margin_exposure_per_trader (no limit if None)'''
+    if (self.max_margin_exposure_per_trader is None):
+      return False
+    return (trader.ac.margin_bal + margin) > self.max_margin_exposure_per_trader
+
   def _calc_execution_price_or_reject(self, order, ins, buysell, date):
     '''
     calc_execution_price(ins, buysell, date), or None after queuing an
@@ -76,7 +110,8 @@ class Broker(object):
     '''
     search the orderQ for orders to open positions
     calc execution price
-    calc margin requirement, and confirm sufficient funds
+    calc margin requirement, confirm any configured portfolio risk
+    limits are respected, and confirm sufficient funds
     open position
     generate OrderReceipt & place on orderQ
     '''
@@ -109,6 +144,12 @@ class Broker(object):
         # exec_price has already gapped past the order's own stop_loss
         # level - the position would open already beyond its stop
         receipt = OrderReceipt(order, 'gapped_through_stop_loss', 0, date, 0)
+      elif (self._exceeds_max_open_positions_per_trader(order)):
+        receipt = OrderReceipt(order, 'max_open_positions_per_trader_exceeded', 0, date, 0)
+      elif (self._exceeds_max_open_positions_per_instrument(order)):
+        receipt = OrderReceipt(order, 'max_open_positions_per_instrument_exceeded', 0, date, 0)
+      elif (self._exceeds_max_margin_exposure_per_trader(trader, margin)):
+        receipt = OrderReceipt(order, 'max_margin_exposure_per_trader_exceeded', 0, date, 0)
       elif (margin > trader.ac.cash_bal):
         receipt = OrderReceipt(order, 'insufficient_cash_bal', 0, date, 0)
       else:

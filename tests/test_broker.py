@@ -215,6 +215,74 @@ class TestTransactionCost(unittest.TestCase):
     self.assertEqual(trader.ac.net_booked_position, Decimal('8'))
 
 
+class TestPortfolioRiskLimits(unittest.TestCase):
+
+  def test_no_limits_configured_leaves_opening_unconstrained(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+
+    open_position(trader, broker, DAY1)
+    open_position(trader, broker, DAY1)
+
+    self.assertEqual(len(broker.open_positions), 2)
+
+  def test_max_open_positions_per_trader_rejects_once_the_limit_is_reached(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1,
+                              max_open_positions_per_trader=1)
+
+    open_position(trader, broker, DAY1)
+
+    order = Order('s&p500', 'buy', 1, Decimal('90'), Decimal('110'), DAY1)
+    trader.submit_order(order)
+    broker.execute_orders_to_open(DAY1)
+
+    self.assertEqual(len(broker.open_positions), 1)
+    receipts = receiptQ.extract_matching(lambda r: r.order is order)
+    self.assertEqual(receipts[0].status, 'max_open_positions_per_trader_exceeded')
+
+  def test_max_open_positions_per_instrument_is_scoped_to_that_instrument(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 'AAA', DAY1, DAY1,
+                              max_open_positions_per_instrument=1)
+
+    open_position(trader, broker, DAY1, ins='AAA')
+
+    aaa_order = Order('AAA', 'buy', 1, Decimal('90'), Decimal('110'), DAY1)
+    trader.submit_order(aaa_order)
+    broker.execute_orders_to_open(DAY1)
+
+    self.assertEqual(len(broker.open_positions), 1)
+    receipts = receiptQ.extract_matching(lambda r: r.order is aaa_order)
+    self.assertEqual(receipts[0].status, 'max_open_positions_per_instrument_exceeded')
+
+    # a different instrument is unaffected by AAA's own limit
+    open_position(trader, broker, DAY1, ins='BBB')
+    self.assertEqual(len(broker.open_positions), 2)
+
+  def test_max_margin_exposure_per_trader_rejects_orders_that_would_exceed_the_cap(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1,
+                              max_margin_exposure_per_trader=Decimal('15'))
+
+    open_position(trader, broker, DAY1)  # margin = 100-90 = 10, exposure now 10
+    self.assertEqual(trader.ac.margin_bal, Decimal('10'))
+
+    # a second order's margin (10) would bring total exposure to 20 > 15
+    order = Order('s&p500', 'buy', 1, Decimal('90'), Decimal('110'), DAY1)
+    trader.submit_order(order)
+    broker.execute_orders_to_open(DAY1)
+
+    self.assertEqual(len(broker.open_positions), 1)
+    self.assertEqual(trader.ac.margin_bal, Decimal('10'))
+    receipts = receiptQ.extract_matching(lambda r: r.order is order)
+    self.assertEqual(receipts[0].status, 'max_margin_exposure_per_trader_exceeded')
+
+
 class TestPositionExpired(unittest.TestCase):
 
   def setUp(self):
