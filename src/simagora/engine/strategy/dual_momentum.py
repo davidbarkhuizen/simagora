@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-from ...domain.order import Order
 from .strategy_base import MultiInstrumentStrategy
 
 class DualMomentumStrategy(MultiInstrumentStrategy):
@@ -54,5 +53,4 @@ class DualMomentumStrategy(MultiInstrumentStrategy):
       self.close_positions(positions, date)
 
     cur_price = self.datafeed.get_price(leader, date, 'close')
-    buy_order = Order(leader, 'buy', 1, self.stop_loss_level(cur_price, 'buy', self.stop_loss_margin), None, date)
-    self.submit_order(buy_order)
+    self.submit_stop_only_order(leader, 'buy', 1, cur_price, self.stop_loss_margin, date)

@@ -1,6 +1,5 @@
 from decimal import Decimal
 
-from ...domain.order import Order
 from .strategy_base import MultiInstrumentStrategy
 
 class CrossSectionalMomentumStrategy(MultiInstrumentStrategy):
@@ -53,5 +52,4 @@ class CrossSectionalMomentumStrategy(MultiInstrumentStrategy):
       if ((ins, buysell) in open_by_key):
         continue
       cur_price = self.datafeed.get_price(ins, date, 'close')
-      order = Order(ins, buysell, 1, self.stop_loss_level(cur_price, buysell, self.stop_loss_margin), None, date)
-      self.submit_order(order)
+      self.submit_stop_only_order(ins, buysell, 1, cur_price, self.stop_loss_margin, date)

@@ -46,6 +46,20 @@ class BaseStrategy(object):
       self.take_profit_level(cur_price, buysell, take_profit_margin), date)
     self.submit_order(order)
 
+  def submit_stop_only_order(self, ins, buysell, quantity, cur_price, stop_loss_margin, date):
+    '''
+    build and submit an Order in the given direction, with only a
+    stop-loss level computed via stop_loss_level around cur_price and
+    no take-profit - the shape shared by every ranking/rotation
+    MultiInstrumentStrategy (DualMomentum, CrossSectionalMomentum,
+    LowVolatility, PairsTrading), whose exits are driven by ranking
+    changes or z-score reversion rather than a fixed profit target,
+    but which still need a stop_loss on every order since
+    Broker.execute_orders_to_open requires one to size margin
+    '''
+    order = Order(ins, buysell, quantity, self.stop_loss_level(cur_price, buysell, stop_loss_margin), None, date)
+    self.submit_order(order)
+
   def log_self(self):
     '''log this strategy's own source file, line by line, for the run's audit trail'''
     source_file = inspect.getfile(type(self))
