@@ -76,6 +76,10 @@ to be run from the repo root.
   above already accepts but a plain `DataFeed` ignores (it only ever tracks one).
   Exposes the identical method set, so it's a drop-in replacement anywhere a
   "datafeed" is expected. See [Multi-instrument support](multi-instrument.md).
+  Also exposes `spread`/`n_day_spread_moving_avg`/`n_day_spread_std_dev` for the
+  price difference between two instruments, with no `DataFeed` equivalent since a
+  spread is inherently a two-instrument concept - a day either leg has no data
+  for is dropped from the trailing window rather than shifting it further back.
 
 ## Top level
 

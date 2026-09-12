@@ -88,6 +88,18 @@ class TestDataFeed(unittest.TestCase):
     # the very first day has no preceding day to compare against
     self.assertIsNone(self.datafeed.n_day_return(self.instrument, date(2010, 1, 1), 'close', 1))
 
+  def test_trailing_dates_includes_the_given_date(self):
+    dates = self.datafeed.trailing_dates(date(2010, 1, 3), 3, include_current=True)
+    self.assertEqual(dates, [date(2010, 1, 3), date(2010, 1, 2), date(2010, 1, 1)])
+
+  def test_trailing_dates_excludes_the_given_date_when_requested(self):
+    dates = self.datafeed.trailing_dates(date(2010, 1, 4), 3, include_current=False)
+    self.assertEqual(dates, [date(2010, 1, 3), date(2010, 1, 2), date(2010, 1, 1)])
+
+  def test_trailing_dates_caps_at_available_history(self):
+    dates = self.datafeed.trailing_dates(date(2010, 1, 1), 5, include_current=True)
+    self.assertEqual(dates, [date(2010, 1, 1)])
+
 
 if __name__ == '__main__':
   unittest.main()

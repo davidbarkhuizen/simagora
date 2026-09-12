@@ -83,5 +83,59 @@ class TestUniverse(unittest.TestCase):
     self.assertIsNotNone(self.universe.get_price_info('BBB', date(2010, 1, 3)))
 
 
+class TestUniverseSpread(unittest.TestCase):
+  '''
+  exercises Universe's two-instrument spread methods, including the
+  case where one leg has a calendar gap the other doesn't
+  '''
+
+  def setUp(self):
+    self.data_root = tempfile.mkdtemp()
+
+    # CCC trades all three days
+    with open(os.path.join(self.data_root, 'CCC.csv'), 'w', newline='') as f:
+      f.write('date,open,high,low,close,volume,adj_close\n')
+      f.write('2010-01-01,100,101,99,100,1000,100\n')
+      f.write('2010-01-02,100,103,100,102,1000,102\n')
+      f.write('2010-01-03,102,105,101,104,1000,104\n')
+
+    # DDD is missing 2010-01-03 - a calendar gap CCC doesn't have
+    with open(os.path.join(self.data_root, 'DDD.csv'), 'w', newline='') as f:
+      f.write('date,open,high,low,close,volume,adj_close\n')
+      f.write('2010-01-01,90,91,89,90,500,90\n')
+      f.write('2010-01-02,90,96,90,95,500,95\n')
+
+    self.universe = Universe(['CCC', 'DDD'], data_root=self.data_root)
+
+  def tearDown(self):
+    shutil.rmtree(self.data_root)
+
+  def test_spread_is_the_price_difference_between_the_two_legs(self):
+    s = self.universe.spread('CCC', 'DDD', date(2010, 1, 2), 'close')
+    self.assertEqual(s, Decimal('102') - Decimal('95'))
+
+  def test_spread_is_none_when_either_leg_has_no_data_for_the_date(self):
+    # DDD has no 2010-01-03 bar at all
+    self.assertIsNone(self.universe.spread('CCC', 'DDD', date(2010, 1, 3), 'close'))
+
+  def test_n_day_spread_moving_avg_drops_days_the_other_leg_has_no_data_for(self):
+    # walking CCC's own 3-day calendar back from 2010-01-03: that day's
+    # spread is None (DDD has no data) and gets dropped rather than
+    # pulling in a 4th day to compensate, leaving just 01-02 (7) and
+    # 01-01 (10) -> average 8.5
+    avg = self.universe.n_day_spread_moving_avg('CCC', 'DDD', date(2010, 1, 3), 'close', 5)
+    self.assertEqual(avg, Decimal('8.5'))
+
+  def test_n_day_spread_std_dev_matches_hand_computed_value(self):
+    # same two values as above (7, 10): mean 8.5, population variance
+    # = ((7-8.5)^2 + (10-8.5)^2) / 2 = 2.25, sqrt = 1.5
+    std = self.universe.n_day_spread_std_dev('CCC', 'DDD', date(2010, 1, 3), 'close', 5)
+    self.assertEqual(std, Decimal('1.5'))
+
+  def test_spread_stats_return_none_for_a_zero_length_window(self):
+    avg = self.universe.n_day_spread_moving_avg('CCC', 'DDD', date(2010, 1, 1), 'close', 0)
+    self.assertIsNone(avg)
+
+
 if __name__ == '__main__':
   unittest.main()
