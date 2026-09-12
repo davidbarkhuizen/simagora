@@ -118,6 +118,46 @@ class TestReportPerformance(unittest.TestCase):
     sim.report_performance()  # must not raise (empty equity_curve guarded separately from trade_pnls)
 
 
+class TestPlotCreatesMissingPlotDirectory(unittest.TestCase):
+  '''
+  plot() previously assumed 'plot/' already existed relative to cwd -
+  fig.savefig() raises FileNotFoundError otherwise, which is exactly
+  what a fresh checkout's first real run hits (see docs/engine-review.md)
+  '''
+
+  def setUp(self):
+    self.data_root = tempfile.mkdtemp()
+    with open(os.path.join(self.data_root, 'testins.csv'), 'w', newline='') as f:
+      f.write('date,open,high,low,close,volume,adj_close\n')
+      f.write('2010-01-01,100,101,99,100,1000,100\n')
+      f.write('2010-01-02,100,103,100,102,1000,102\n')
+    self.original_default_data_root = datafeed_module.DEFAULT_DATA_ROOT
+    datafeed_module.DEFAULT_DATA_ROOT = self.data_root
+
+    # deliberately no 'plot/' subdirectory created here, unlike
+    # TestPlotFindsTheRightTrader
+    self.work_dir = tempfile.mkdtemp()
+    self.old_cwd = os.getcwd()
+    os.chdir(self.work_dir)
+
+  def tearDown(self):
+    os.chdir(self.old_cwd)
+    datafeed_module.DEFAULT_DATA_ROOT = self.original_default_data_root
+    shutil.rmtree(self.data_root)
+    shutil.rmtree(self.work_dir)
+
+  def test_plot_creates_the_plot_directory_when_missing(self):
+    sim = Simulator(
+      'testins', ['movavg'], date(2010, 1, 1), date(2010, 1, 2), Decimal('10000'), time_stamp='test')
+    sim.run()
+
+    self.assertFalse(os.path.isdir('plot'))
+
+    sim.plot()  # must not raise
+
+    self.assertTrue(os.path.isdir('plot'))
+
+
 class TestSimulatorThreadsBrokerConfigToBroker(unittest.TestCase):
   '''
   transaction_cost/max_open_positions_per_trader/

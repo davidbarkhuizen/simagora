@@ -95,18 +95,30 @@ rewrite - none outstanding right now; `Simulator.report_performance()`
   etc.), so this is a deliberate lot-based model, not an oversight, but
   worth naming since a portfolio-level "aggregate exposure per instrument"
   view doesn't exist without walking `open_positions` yourself.
-- **`Launcher.report()`/`Simulator.plot()`** hardcode `'plot/' + time_stamp`
-  as the output path with no directory-creation guard — will raise if
-  `plot/` doesn't exist. Minor, easy to miss since it's outside the core
-  sim loop.
+
+## Quick fixes
+
+Small, low-risk items — worth doing opportunistically rather than as
+their own planned piece of work:
+
+- **`Order.target_price`/`target_floor`/`target_ceiling`** are accepted in
+  `Order.__init__` and stored, but never read anywhere in the codebase —
+  vestigial/unused fields; a candidate for straight removal (see §1)
+  rather than eventual wiring-up, since nothing currently constructs an
+  `Order` expecting them to do anything.
 
 ## Biggest bang-for-buck
 
-Add the missing directory-creation guard for `Launcher.report()`/
-`Simulator.plot()`'s hardcoded `'plot/' + time_stamp` output path (§4) —
-a fresh checkout with no `plot/` directory raises on the very first real
-run, right at the last step after a full backtest has already executed.
-The fix is a single `os.makedirs('plot', exist_ok=True)` before the
-`fig.savefig` call, no design decisions or new behavior involved, so it's
-a minimal, low-risk change that removes the most easily-hit rough edge
-for anyone actually running the engine rather than its test suite.
+Model slippage on stop-loss execution (§1) — `Broker.manage_open_positions`
+already fetches `pdata` (the day's high/low/close) before calling
+`Account.stop_loss(date, pos, pdata, buysell)`, but `stop_loss` has never
+read that parameter: it fills at the literal `order.stop_loss` trigger
+level (now cost-adjusted, see above) regardless of how far the day's
+low/high actually gapped past it. Since `pdata` is already sitting in
+`stop_loss`'s own argument list, the fix is scoped to that one method:
+exit at `min(order.stop_loss, pdata['low'])` for a long (or
+`max(order.stop_loss, pdata['high'])` for a short) before applying
+`apply_exit_cost`, so a fast-market gap-through actually costs more than
+the margin reserved at entry, instead of being capped by construction.
+No new data, no new order type, no design bikeshedding - just using a
+value the method already receives.
