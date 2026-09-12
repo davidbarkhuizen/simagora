@@ -355,6 +355,20 @@ class Broker(object):
     price = (pdata['high'] + pdata['low']) / Decimal(2)
     return (price + self.transaction_cost) if (buysell == 'buy') else (price - self.transaction_cost)
 
+  def apply_exit_cost(self, price, position_buysell):
+    '''
+    price adjusted unfavorably by self.transaction_cost for a position
+    exit, given the position's own original order.buysell direction -
+    closing a 'buy' fills as a sell (cost subtracted, receiving less);
+    closing a 'sell' fills as a buy (cost added, paying more). Same
+    cost convention as calc_execution_price, but for an already-known
+    exit price level (a stop_loss/take_profit trigger, or a day's raw
+    close) rather than one freshly computed from pdata - used by
+    Account.stop_loss/take_profit/handle_expiry so every exit path pays
+    the same transaction_cost as an open or an explicit close already do.
+    '''
+    return (price - self.transaction_cost) if (position_buysell == 'buy') else (price + self.transaction_cost)
+
   def log_all_positions(self, d):
     '''
     log net_value of all positions when open and at end of day on closing

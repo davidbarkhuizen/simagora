@@ -9,13 +9,14 @@ simplification.
 
 ## 1. Obvious logical gaps
 
-- **Transaction cost only covers the open/close spread, not exits or fees.**
-  `Broker.calc_execution_price` now applies an optional flat per-unit
-  `transaction_cost` against every open and explicit-close fill (both
-  round-trip legs), but stop-loss/take-profit/expiry exits still fill at
-  their literal trigger level or the day's raw close, untouched by cost -
-  and there's still no separate commission/fee model distinct from this
-  spread-style cost.
+- **No separate commission/fee model.** `Broker.calc_execution_price`'s
+  `transaction_cost` and `Broker.apply_exit_cost` (used by every exit path -
+  stop-loss, take-profit, and expiry, alongside the open/explicit-close
+  fills `calc_execution_price` already covered) now apply the same flat
+  per-unit cost against every fill, open or close. There's still no
+  separate commission/fee model distinct from this spread-style cost
+  (e.g. a fixed per-trade fee, or one that scales with notional rather
+  than quantity).
 - **No slippage on stop-loss execution.** `Account.stop_loss` always books
   the loss as exactly the margin reserved at entry, regardless of how far
   the day's low actually gapped past the stop level. Real stop orders can
@@ -101,13 +102,11 @@ rewrite - none outstanding right now; `Simulator.report_performance()`
 
 ## Biggest bang-for-buck
 
-Extend transaction-cost modeling to stop-loss/take-profit/expiry exits
-(§1) — `Broker.calc_execution_price`'s `transaction_cost` machinery
-already exists and is applied to every open and explicit-close fill, but
-stop-loss/take-profit/expiry exits still bypass it entirely, filling at
-their literal trigger level or the day's raw close. Since the cost model
-and the places `Account` books those three exit kinds are both already in
-hand, applying the existing per-unit cost consistently to their exit
-prices too is a scoped, additive change (no new cost model to design) that
-closes the most visible remaining gap between "every fill pays the
-configured cost" and what the engine actually does today.
+Add the missing directory-creation guard for `Launcher.report()`/
+`Simulator.plot()`'s hardcoded `'plot/' + time_stamp` output path (§4) —
+a fresh checkout with no `plot/` directory raises on the very first real
+run, right at the last step after a full backtest has already executed.
+The fix is a single `os.makedirs('plot', exist_ok=True)` before the
+`fig.savefig` call, no design decisions or new behavior involved, so it's
+a minimal, low-risk change that removes the most easily-hit rough edge
+for anyone actually running the engine rather than its test suite.

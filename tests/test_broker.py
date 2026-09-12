@@ -153,6 +153,17 @@ class TestExecuteOrdersToClose(unittest.TestCase):
 
 class TestTransactionCost(unittest.TestCase):
 
+  def test_apply_exit_cost_subtracts_for_closing_a_buy_and_adds_for_closing_a_sell(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1, transaction_cost=Decimal('1'))
+
+    # closing a buy fills as a sell (receiving less); closing a sell
+    # fills as a buy (paying more) - same convention as
+    # calc_execution_price, keyed off the position's own buysell
+    self.assertEqual(broker.apply_exit_cost(Decimal('100'), 'buy'), Decimal('99'))
+    self.assertEqual(broker.apply_exit_cost(Decimal('100'), 'sell'), Decimal('101'))
+
   def test_calc_execution_price_adds_cost_for_a_buy_and_subtracts_it_for_a_sell(self):
     datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
     (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
@@ -210,6 +221,69 @@ class TestTransactionCost(unittest.TestCase):
 
     # closing a sell is a buy fill: exec price = 90+1 = 91
     # pdelta = 99-91 = 8 (vs. 10 with no cost) - cost(1) charged on both legs
+    self.assertEqual(trader.ac.margin_bal, Decimal('0'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('10008'))
+    self.assertEqual(trader.ac.net_booked_position, Decimal('8'))
+
+  def test_stop_loss_charges_cost_on_the_exit(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('92'), 'low': Decimal('85'), 'close': Decimal('88')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2, transaction_cost=Decimal('1'))
+    open_position(trader, broker, DAY1)
+    # exec price = 100+1 = 101, margin = 101-90 = 11
+    self.assertEqual(trader.ac.margin_bal, Decimal('11'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9989'))
+
+    broker.manage_open_positions(DAY2)  # stop_loss triggers: low(85) <= 90
+
+    # exit fills as a sell: stop_loss(90) - cost(1) = 89
+    # pdelta = 89-101 = -12 (vs. -11 == -margin with no cost) - cost
+    # deepens the loss past the margin forfeited at open
+    self.assertEqual(trader.ac.margin_bal, Decimal('0'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9988'))
+    self.assertEqual(trader.ac.net_booked_position, Decimal('-12'))
+
+  def test_take_profit_charges_cost_on_the_exit(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('115'), 'low': Decimal('108'), 'close': Decimal('112')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2, transaction_cost=Decimal('1'))
+    open_position(trader, broker, DAY1)
+    # exec price = 100+1 = 101, margin = 101-90 = 11
+    self.assertEqual(trader.ac.margin_bal, Decimal('11'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9989'))
+
+    broker.manage_open_positions(DAY2)  # take_profit triggers: high(115) >= 110
+
+    # exit fills as a sell: take_profit(110) - cost(1) = 109
+    # pdelta = 109-101 = 8 (vs. 10 with no cost)
+    self.assertEqual(trader.ac.margin_bal, Decimal('0'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('10008'))
+    self.assertEqual(trader.ac.net_booked_position, Decimal('8'))
+
+  def test_expiry_charges_cost_on_the_exit(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      # stays within (stop_loss(90), take_profit(110)) all day, so only
+      # the expiry check fires
+      DAY2: {'high': Decimal('103'), 'low': Decimal('99'), 'close': Decimal('110')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2, transaction_cost=Decimal('1'))
+    open_position(trader, broker, DAY1, expiry_date=DAY2)
+    # exec price = 100+1 = 101, margin = 101-90 = 11
+    self.assertEqual(trader.ac.margin_bal, Decimal('11'))
+    self.assertEqual(trader.ac.cash_bal, Decimal('9989'))
+
+    broker.manage_open_positions(DAY2)  # expiry_date reached
+
+    # exit fills as a sell: close(110) - cost(1) = 109
+    # pdelta = 109-101 = 8 (vs. 10 with no cost) - expired in the money
     self.assertEqual(trader.ac.margin_bal, Decimal('0'))
     self.assertEqual(trader.ac.cash_bal, Decimal('10008'))
     self.assertEqual(trader.ac.net_booked_position, Decimal('8'))
