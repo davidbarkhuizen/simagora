@@ -2,7 +2,10 @@ import unittest
 from decimal import Decimal
 from datetime import date, timedelta
 
-from simagora.engine.stats import daily_returns, total_return, cagr, max_drawdown, sharpe_ratio
+from simagora.engine.stats import (
+  daily_returns, total_return, cagr, max_drawdown, sharpe_ratio,
+  win_rate, average_win, average_loss,
+)
 
 DAY1 = date(2010, 1, 1)
 
@@ -89,6 +92,50 @@ class TestSharpeRatio(unittest.TestCase):
     curve = make_curve(['100', '110', '105', '115'])
 
     self.assertGreater(sharpe_ratio(curve), Decimal('0'))
+
+
+class TestWinRate(unittest.TestCase):
+
+  def test_computes_fraction_of_winning_trades(self):
+    pnls = [Decimal('10'), Decimal('-5'), Decimal('20'), Decimal('-1')]
+
+    self.assertEqual(win_rate(pnls), Decimal('0.5'))
+
+  def test_breakeven_trade_does_not_count_as_a_win(self):
+    pnls = [Decimal('10'), Decimal('0'), Decimal('-5'), Decimal('0')]
+
+    self.assertEqual(win_rate(pnls), Decimal('0.25'))
+
+  def test_all_winners_is_one(self):
+    pnls = [Decimal('10'), Decimal('5')]
+
+    self.assertEqual(win_rate(pnls), Decimal('1'))
+
+
+class TestAverageWin(unittest.TestCase):
+
+  def test_averages_only_the_winning_trades(self):
+    pnls = [Decimal('10'), Decimal('-100'), Decimal('30')]
+
+    self.assertEqual(average_win(pnls), Decimal('20'))
+
+  def test_no_winning_trades_is_zero(self):
+    pnls = [Decimal('-10'), Decimal('-5'), Decimal('0')]
+
+    self.assertEqual(average_win(pnls), Decimal('0'))
+
+
+class TestAverageLoss(unittest.TestCase):
+
+  def test_averages_only_the_losing_trades_as_a_signed_value(self):
+    pnls = [Decimal('10'), Decimal('-30'), Decimal('-10')]
+
+    self.assertEqual(average_loss(pnls), Decimal('-20'))
+
+  def test_no_losing_trades_is_zero(self):
+    pnls = [Decimal('10'), Decimal('5'), Decimal('0')]
+
+    self.assertEqual(average_loss(pnls), Decimal('0'))
 
 
 if __name__ == '__main__':

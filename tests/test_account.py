@@ -102,6 +102,86 @@ class TestTallyOpenPositionsCalendarGap(unittest.TestCase):
     self.assertEqual(self.trader.ac.net_open_position[DAY2], Decimal('0'))
 
 
+class TestClosedTrades(unittest.TestCase):
+  '''
+  Account.closed_trades/trade_pnls() - populated by every position close
+  path (take_profit/close_at_price via _close_position, stop_loss,
+  handle_expiry), not just some of them
+  '''
+
+  def test_take_profit_records_the_closed_position_and_its_pnl(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('115'), 'low': Decimal('108'), 'close': Decimal('112')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+    pos = open_position(trader, broker, DAY1, quantity=5)
+
+    broker.manage_open_positions(DAY2)  # take_profit triggers: high(115) >= 110
+
+    self.assertEqual(trader.ac.closed_trades, [pos])
+    self.assertEqual(trader.ac.trade_pnls(), [Decimal('50')])
+
+  def test_stop_loss_records_the_closed_position_and_its_pnl(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('92'), 'low': Decimal('85'), 'close': Decimal('88')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+    pos = open_position(trader, broker, DAY1, quantity=5)
+
+    broker.manage_open_positions(DAY2)  # stop_loss triggers: low(85) <= 90
+
+    self.assertEqual(trader.ac.closed_trades, [pos])
+    self.assertEqual(trader.ac.trade_pnls(), [Decimal('-50')])
+
+  def test_close_at_price_records_the_closed_position_and_its_pnl(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('115'), 'low': Decimal('105'), 'close': Decimal('110')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+    pos = open_position(trader, broker, DAY1, quantity=5)
+
+    close_order = CloseOrder(pos.id, DAY2)
+    trader.submit_order(close_order)
+    broker.execute_orders_to_close(DAY2)
+
+    self.assertEqual(trader.ac.closed_trades, [pos])
+    self.assertEqual(trader.ac.trade_pnls(), [Decimal('50')])
+
+  def test_handle_expiry_records_the_closed_position_and_its_pnl(self):
+    datafeed = FakeDataFeed({DAY1: DAY1_PRICES})
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY1)
+    pos = make_manual_position(broker, trader, 's&p500', 'buy', execution_price=Decimal('100'))
+
+    trader.ac.handle_expiry(DAY2, pos, {'close': Decimal('110')}, 'buy')
+
+    self.assertEqual(trader.ac.closed_trades, [pos])
+    self.assertEqual(trader.ac.trade_pnls(), [Decimal('10')])
+
+  def test_trade_pnls_reflects_closing_order_across_multiple_trades(self):
+    datafeed = FakeDataFeed({
+      DAY1: DAY1_PRICES,
+      DAY2: {'high': Decimal('92'), 'low': Decimal('85'), 'close': Decimal('88')},
+    })
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker, trader) = \
+      make_broker_and_trader(datafeed, Decimal('10000'), 's&p500', DAY1, DAY2)
+    first = open_position(trader, broker, DAY1, quantity=1)   # margin/loss = 10
+    second = open_position(trader, broker, DAY1, quantity=2)  # margin/loss = 20
+
+    broker.manage_open_positions(DAY2)  # both stop out: low(85) <= stop_loss(90)
+
+    # manage_open_positions walks open_positions newest-first (idx counts
+    # down), so `second` (opened later) closes - and is recorded - first
+    self.assertEqual(trader.ac.closed_trades, [second, first])
+    self.assertEqual(trader.ac.trade_pnls(), [Decimal('-20'), Decimal('-10')])
+
+
 class TestEquity(unittest.TestCase):
 
   def test_equity_sums_cash_margin_and_unrealized_pnl(self):

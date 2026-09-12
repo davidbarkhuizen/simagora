@@ -41,17 +41,20 @@ to be run from the repo root.
   `take_profit()` and `close_at_price()` are both just closing a position at some
   price and banking the resulting pnl - the only difference is which price and
   what `TermNotice` reason - so both delegate to a shared private
-  `_close_position(date, pos, price, buysell, reason)`. `equity(date)`/
-  `equity_curve()` read back the daily `d_cash_bal`/`d_margin_bal`/
-  `net_open_position` series `Simulator.run()` already records each trading
-  day, giving cash + margin held + unrealized P&L as a single mark-to-market
-  net worth figure - the input `stats.py` (below) computes performance
-  metrics from.
-- `stats.py` — performance metrics computed off an `Account.equity_curve()`:
-  `total_return`, `cagr`, `max_drawdown`, and an annualized `sharpe_ratio`
-  (reusing `marketdata/statistics.py`'s `mean`/`population_std_dev` on the
+  `_close_position(date, pos, price, buysell, reason)`, which (along with
+  `stop_loss`/`handle_expiry`) also appends the closed `Position` onto
+  `closed_trades`. `equity(date)`/`equity_curve()` read back the daily
+  `d_cash_bal`/`d_margin_bal`/`net_open_position` series `Simulator.run()`
+  already records each trading day, giving cash + margin held + unrealized
+  P&L as a single mark-to-market net worth figure; `trade_pnls()` reads
+  `closed_trades`' `term_notice.profitloss` values back as a plain list -
+  both are the inputs `stats.py` (below) computes performance metrics from.
+- `stats.py` — performance metrics computed off an `Account.equity_curve()`
+  (`total_return`, `cagr`, `max_drawdown`, an annualized `sharpe_ratio` -
+  reusing `marketdata/statistics.py`'s `mean`/`population_std_dev` on the
   curve's `daily_returns`, the same population-statistics convention used
-  elsewhere in the codebase).
+  elsewhere in the codebase) or an `Account.trade_pnls()` list
+  (`win_rate`, `average_win`, `average_loss`).
 - `broker.py` — receives orders via `msgq.py` message queues, computes a fill price
   (midpoint of the day's high/low), opens/closes `Position`s, checks stop-loss/
   take-profit levels against intraday high/low, and updates account balances.

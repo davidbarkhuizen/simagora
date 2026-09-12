@@ -70,6 +70,7 @@ class Account(HasAutoId):
     # record profit/loss
     pos.history[date] = pnl
     pos.term_notice = TermNotice(date, price, pos.id, reason, pnl)
+    self.closed_trades.append(pos)
 
   def take_profit(self, date, pos, pdata, buysell):
     '''
@@ -90,7 +91,8 @@ class Account(HasAutoId):
     pos.history[date] = -margin
                         
     pos.term_notice = TermNotice(date, order.stop_loss, pos.id, 'stop_loss', (Decimal(0)-margin))
-    
+    self.closed_trades.append(pos)
+
     # cash_bal, margin_bal, net_booked_position
     # logging.info('%s,%s,%s,%s,%s' % (str(date), self.cash_bal, self.margin_bal, self.net_booked_position, pos.close_str()))    
 
@@ -154,7 +156,8 @@ class Account(HasAutoId):
     # term_date, term_price, position_id, reason, profitloss) 
       
     pos.term_notice = TermNotice(date, pdata['close'], pos.id, reason, delta)
-    
+    self.closed_trades.append(pos)
+
     # cash_bal, margin_bal, net_booked_position
     #logging.info('%s,%s,%s,%s,%s' % (str(date), self.cash_bal, self.margin_bal, self.net_booked_position, pos.close_str()))    
 
@@ -218,3 +221,11 @@ class Account(HasAutoId):
     from
     '''
     return [(d, self.equity(d)) for d in sorted(self.d_cash_bal.keys())]
+
+  def trade_pnls(self):
+    '''
+    realized profit/loss for every closed trade, in closing order -
+    the series engine.stats's win_rate/average_win/average_loss are
+    computed from
+    '''
+    return [pos.term_notice.profitloss for pos in self.closed_trades]
