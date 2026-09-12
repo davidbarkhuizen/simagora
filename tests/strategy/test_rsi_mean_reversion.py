@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from simagora.engine.strategy import RSIMeanReversionStrategy
 
-from testutil import FakeDataFeed, DAY1, make_trader_with_strategy, submitted_orders
+from testutil import FakeDataFeed, DAY1, make_trader_with_strategy, submitted_orders, assert_banded_order
 
 
 class _ShortLookbackRSIMeanReversion(RSIMeanReversionStrategy):
@@ -35,11 +35,7 @@ class TestRSIMeanReversionStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    orders = submitted_orders(orderQ)
-    self.assertEqual(len(orders), 1)
-    self.assertEqual(orders[0].buysell, 'buy')
-    self.assertLess(orders[0].stop_loss, Decimal('80'))
-    self.assertGreater(orders[0].take_profit, Decimal('80'))
+    assert_banded_order(self, submitted_orders(orderQ), 'buy', Decimal('80'))
 
   def test_sell_signal_when_rsi_is_overbought(self):
     # closes 100 -> 110 -> 120: two gains, no losses -> RSI = 100
@@ -47,11 +43,7 @@ class TestRSIMeanReversionStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    orders = submitted_orders(orderQ)
-    self.assertEqual(len(orders), 1)
-    self.assertEqual(orders[0].buysell, 'sell')
-    self.assertGreater(orders[0].stop_loss, Decimal('120'))
-    self.assertLess(orders[0].take_profit, Decimal('120'))
+    assert_banded_order(self, submitted_orders(orderQ), 'sell', Decimal('120'))
 
   def test_no_signal_when_rsi_is_neutral(self):
     # closes 100 -> 105 -> 102: RSI = 62.5, between the 30/70 thresholds

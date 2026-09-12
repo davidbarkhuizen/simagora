@@ -12,7 +12,7 @@ from datetime import timedelta
 
 from simagora.engine.strategy import DualMovingAverageCrossoverStrategy
 
-from testutil import FakeDataFeed, DAY1, make_trader_with_strategy, submitted_orders
+from testutil import FakeDataFeed, DAY1, make_trader_with_strategy, submitted_orders, assert_banded_order
 
 
 class _ShortLookbackDualMACrossover(DualMovingAverageCrossoverStrategy):
@@ -45,11 +45,7 @@ class TestDualMovingAverageCrossoverStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    orders = submitted_orders(orderQ)
-    self.assertEqual(len(orders), 1)
-    self.assertEqual(orders[0].buysell, 'buy')
-    self.assertLess(orders[0].stop_loss, Decimal('130'))
-    self.assertGreater(orders[0].take_profit, Decimal('130'))
+    assert_banded_order(self, submitted_orders(orderQ), 'buy', Decimal('130'))
 
   def test_sell_signal_when_fast_average_crosses_below_slow(self):
     # fast(2-day) = avg(100, 70) = 85, slow(3-day) = avg(100, 100, 70) = 90
@@ -57,11 +53,7 @@ class TestDualMovingAverageCrossoverStrategy(unittest.TestCase):
 
     trader.execute_strategy(today)
 
-    orders = submitted_orders(orderQ)
-    self.assertEqual(len(orders), 1)
-    self.assertEqual(orders[0].buysell, 'sell')
-    self.assertGreater(orders[0].stop_loss, Decimal('70'))
-    self.assertLess(orders[0].take_profit, Decimal('70'))
+    assert_banded_order(self, submitted_orders(orderQ), 'sell', Decimal('70'))
 
   def test_no_signal_when_fast_and_slow_averages_are_equal(self):
     orderQ, trader, today = self.make_trader(Decimal('100'))
