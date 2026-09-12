@@ -65,7 +65,7 @@ to be run from the repo root.
   own order/close-order receipts each day (`process_receipts()`), logging a warning
   for anything that didn't succeed (e.g. insufficient cash) instead of the receipt
   being silently discarded.
-- `strategy.py` — five strategies, all sharing `BaseStrategy` for trader/datafeed
+- `strategy.py` — six strategies, all sharing `BaseStrategy` for trader/datafeed
   wiring, order submission, and `log_self()`; split into `SingleInstrumentStrategy`/
   `MultiInstrumentStrategy` for what instrument(s) they trade (see Multi-instrument
   support below). Selected by name (see Strategies below) via
@@ -146,8 +146,8 @@ below) — each element is a registry name, looked up in `strategy.STRATEGY_REGI
   average (oversold), sell when it rises the same distance above it (overbought),
   each with fixed 1%/2% stop-loss/take-profit bands. No position-management beyond
   that — a reversion trade is meant to be quick.
-- **`'dualmomentum'`** — `DualMomentumStrategy`, the one multi-instrument strategy
-  (`MultiInstrumentStrategy`, trades across `trader.universe`). An
+- **`'dualmomentum'`** — `DualMomentumStrategy`, the first multi-instrument
+  strategy (`MultiInstrumentStrategy`, trades across `trader.universe`). An
   Antonacci-style rotation: ranks `trader.universe` by trailing 20-day return
   (relative momentum) each day and holds a single long position in the leader,
   but only while the leader's own return is positive (absolute momentum filter) —
@@ -170,6 +170,13 @@ below) — each element is a registry name, looked up in `strategy.STRATEGY_REGI
   engine capability - `Account`'s P&L math (`_signed_pdelta`) is already symmetric
   between `'buy'`/`'sell'`, the same mechanism `MovingAverageCrossoverStrategy`/
   `TrendFollowingStrategy` already use for their own `'sell'` signals.
+- **`'lowvolatility'`** — `LowVolatilityStrategy`, also a `MultiInstrumentStrategy`.
+  Ranks `trader.universe` by trailing 20-day standard deviation of daily closes
+  (`n_day_std_dev`) each day and holds long positions in the calmest `top_n`
+  (default 1) instruments - the opposite selection from the momentum strategies
+  above. Long-only, with no cash filter: it's always fully invested in whichever
+  instruments are currently calmest. A currently-held instrument still among the
+  calmest is left alone rather than churned.
 
 An unrecognized name raises `ValueError` rather than silently falling back to a
 default, so a typo doesn't quietly run the wrong strategy; `None` (what every
@@ -177,9 +184,9 @@ default, so a typo doesn't quietly run the wrong strategy; `None` (what every
 strategy loads) resolves to `'movavg'`.
 
 The first three strategies above are single-instrument (`SingleInstrumentStrategy`
-reads `trader.instrument`); `DualMomentumStrategy` and `CrossSectionalMomentumStrategy`
-are multi-instrument — see Multi-instrument support below for the plumbing they're
-built on.
+reads `trader.instrument`); `DualMomentumStrategy`, `CrossSectionalMomentumStrategy`,
+and `LowVolatilityStrategy` are multi-instrument — see Multi-instrument support
+below for the plumbing they're built on.
 
 ## Multi-instrument support
 
@@ -239,6 +246,16 @@ was handed.
   at once, rather than a single rotating long/cash position. Confirms shorting
   needed no engine changes either - `Account`'s `_signed_pdelta` P&L math was
   already symmetric between `'buy'`/`'sell'`.
+- **`LowVolatilityStrategy`** (see Strategies above) is the third: ranks by
+  `n_day_std_dev` instead of `n_day_return`, and holds the *lowest*-ranked
+  instruments (calmest) rather than the highest - showing the same ranking
+  mechanism generalizes past momentum-style metrics. Long-only, no cash filter.
+  Its tests caught a real bug in `FakeDataFeed` (the test double in
+  `testutil.py`): `_trailing_values` (backing `n_day_moving_avg`/`n_day_high`/
+  `n_day_low`/`n_day_std_dev`) raised `ValueError` for a date with no data at all,
+  where the real `DataFeed` gracefully returns no values - unnoticed until a
+  strategy called it against a *non-primary* universe instrument with a calendar
+  gap, which no earlier test exercised.
 
 ## Position closing
 
@@ -260,7 +277,8 @@ A position closes the same day one of the following happens, in this order:
    leader changes (rotating out of the old one) or the absolute-momentum filter
    trips (rotating fully to cash). `CrossSectionalMomentumStrategy` submits one
    for each open position whose instrument/direction has fallen out of the
-   current top/bottom ranking.
+   current top/bottom ranking. `LowVolatilityStrategy` submits one for each open
+   position whose instrument is no longer among the calmest.
 
 ## Setup
 

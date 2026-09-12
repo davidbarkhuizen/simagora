@@ -9,7 +9,7 @@ from simagora.domain.position import Position
 from simagora.engine.strategy import (
   MovingAverageCrossoverStrategy, TrendFollowingStrategy, MeanReversionStrategy,
   MultiInstrumentStrategy, DualMomentumStrategy, CrossSectionalMomentumStrategy,
-  resolve_strategy_class,
+  LowVolatilityStrategy, resolve_strategy_class,
 )
 from simagora.engine.trader import Trader
 
@@ -367,6 +367,97 @@ class TestCrossSectionalMomentumStrategy(unittest.TestCase):
     self.assertEqual(by_ins, {'AAA': 'buy', 'BBB': 'buy'})
 
 
+class _ShortLookbackLowVolatility(LowVolatilityStrategy):
+  '''test-only: a 2-day lookback keeps fixtures small (default is 20) -
+  n_day_std_dev needs at least 2 values to show any spread at all'''
+  lookback_window_days = 2
+
+
+class TestLowVolatilityStrategy(unittest.TestCase):
+  '''
+  exercises LowVolatilityStrategy end-to-end through a real Trader,
+  with a FakeUniverse standing in for Universe
+  '''
+
+  # over DAY1->DAY2: AAA is flat (std 0, calmest), BBB moves modestly
+  # (std 2), CCC moves the most (std 5)
+  THREE_WAY_PRICES = {
+    'AAA': {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('100')}},
+    'BBB': {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('104')}},
+    'CCC': {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('110')}},
+  }
+
+  def make_trader(self, prices_by_ins, end_date=DAY2, strategy_class=_ShortLookbackLowVolatility):
+    feeds = {ins: FakeDataFeed(prices) for ins, prices in prices_by_ins.items()}
+    universe_feed = FakeUniverse(feeds)
+    universe = list(prices_by_ins.keys())
+
+    (orderQ, receiptQ, term_req_Q, term_notice_Q, broker) = make_broker(universe_feed)
+    trader = Trader(
+      universe_feed, broker, Decimal('10000'), universe[0], None, DAY1, end_date,
+      universe=universe)
+    trader.strategy = strategy_class(trader, DAY1, end_date)
+    return orderQ, broker, trader
+
+  def make_manual_position(self, broker, trader, ins, execution_price=Decimal('100')):
+    order = Order(ins, 'buy', 1, Decimal('1'), None, DAY1)
+    order.trader_id = trader.id
+    receipt = OrderReceipt(order, 'opened', execution_price, DAY1, Decimal('0'))
+    pos = Position(receipt)
+    broker.open_positions.append(pos)
+    broker.positions[pos.id] = pos
+    return pos
+
+  def test_goes_long_the_calmest_instrument(self):
+    orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
+
+    trader.execute_strategy(DAY2)
+
+    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    self.assertEqual(len(orders), 1)
+    self.assertEqual(orders[0].ins, 'AAA')
+    self.assertEqual(orders[0].buysell, 'buy')
+    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))), 0)
+
+  def test_holds_the_calmest_instrument_without_churn_when_unchanged(self):
+    orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
+    self.make_manual_position(broker, trader, 'AAA')
+
+    trader.execute_strategy(DAY2)
+
+    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, Order))), 0)
+    self.assertEqual(len(orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))), 0)
+
+  def test_rotates_out_of_a_position_that_is_no_longer_the_calmest(self):
+    orderQ, broker, trader = self.make_trader(self.THREE_WAY_PRICES)
+    stale = self.make_manual_position(broker, trader, 'CCC')  # the most volatile of the three
+
+    trader.execute_strategy(DAY2)
+
+    close_orders = orderQ.extract_matching(lambda x: isinstance(x, CloseOrder))
+    self.assertEqual([co.position_id for co in close_orders], [stale.id])
+
+    new_orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    self.assertEqual(len(new_orders), 1)
+    self.assertEqual(new_orders[0].ins, 'AAA')
+
+  def test_instrument_with_no_data_for_the_date_is_dropped_from_ranking(self):
+    # BBB has no DAY2 data at all (a calendar mismatch, not just a
+    # shorter lookback) - n_day_std_dev returns None for it on DAY2,
+    # and it must be excluded rather than crashing the ranking
+    prices = {
+      'AAA': {DAY1: {'close': Decimal('100')}, DAY2: {'close': Decimal('100')}},
+      'BBB': {DAY1: {'close': Decimal('100')}},
+    }
+    orderQ, broker, trader = self.make_trader(prices)
+
+    trader.execute_strategy(DAY2)  # must not raise
+
+    orders = orderQ.extract_matching(lambda x: isinstance(x, Order))
+    self.assertEqual(len(orders), 1)
+    self.assertEqual(orders[0].ins, 'AAA')
+
+
 class TestResolveStrategyClass(unittest.TestCase):
 
   def test_known_names_resolve_to_the_matching_class(self):
@@ -375,6 +466,7 @@ class TestResolveStrategyClass(unittest.TestCase):
     self.assertIs(resolve_strategy_class('meanreversion'), MeanReversionStrategy)
     self.assertIs(resolve_strategy_class('dualmomentum'), DualMomentumStrategy)
     self.assertIs(resolve_strategy_class('crosssectionalmomentum'), CrossSectionalMomentumStrategy)
+    self.assertIs(resolve_strategy_class('lowvolatility'), LowVolatilityStrategy)
 
   def test_none_resolves_to_the_default(self):
     self.assertIs(resolve_strategy_class(None), MovingAverageCrossoverStrategy)

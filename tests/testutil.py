@@ -65,6 +65,11 @@ class FakeDataFeed(object):
 
   def _trailing_values(self, d, field, n, include_current):
     dates = sorted(self.price_info_by_date.keys())
+    if (d not in dates):
+      # matches DataFeed's own _index_of/_trailing_values: no data at
+      # all for d (e.g. a multi-instrument calendar mismatch) yields
+      # no trailing values, not an exception
+      return []
     idx = dates.index(d)
     end = idx + 1 if include_current else idx
     window = dates[max(0, end - n): end]

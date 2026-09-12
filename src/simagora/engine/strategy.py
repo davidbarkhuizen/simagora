@@ -380,12 +380,77 @@ class CrossSectionalMomentumStrategy(MultiInstrumentStrategy):
       self.submit_order(order)
 
 
+class LowVolatilityStrategy(MultiInstrumentStrategy):
+  '''
+  Low-volatility anomaly: ranks trader.universe by trailing
+  lookback_window_days standard deviation of daily closes each day
+  (n_day_std_dev) and holds long positions in the calmest top_n
+  instruments - the opposite selection from a momentum-style strategy,
+  betting steadier assets earn comparable or better risk-adjusted
+  returns than the most volatile ones. Long-only, no short side, and
+  no cash filter - it's always fully invested in the calmest names the
+  universe currently offers. A currently-held instrument still among
+  the calmest is left alone rather than churned.
+  '''
+
+  lookback_window_days = 20
+  top_n = 1
+  stop_loss_margin = Decimal('0.05')  # 5 %
+
+  def rank_universe(self, date):
+    '''{instrument: n_day_std_dev}, dropping instruments without enough trailing history yet'''
+    vols = {}
+    for ins in self.universe:
+      std = self.datafeed.n_day_std_dev(ins, date, 'close', self.lookback_window_days)
+      if (std is not None):
+        vols[ins] = std
+    return vols
+
+  def open_buy_positions_by_instrument(self):
+    '''{instrument: [positions]} of this trader's own currently open buy positions'''
+    by_ins = {}
+    open_positions = self.trader.broker.get_open_positions_for_trader(self.trader.id)
+    for pos in open_positions:
+      order = pos.order_receipt.order
+      if (order.buysell == 'buy'):
+        by_ins.setdefault(order.ins, []).append(pos)
+    return by_ins
+
+  def close_positions(self, positions, date):
+    for pos in positions:
+      self.submit_order(CloseOrder(pos.id, date))
+
+  def execute(self, date):
+    vols = self.rank_universe(date)
+    if (len(vols) == 0):
+      # not enough trailing history anywhere yet
+      return
+
+    calmest = set(sorted(vols, key=vols.get)[:self.top_n])
+    open_by_ins = self.open_buy_positions_by_instrument()
+
+    # CLOSE POSITIONS THAT FELL OUT OF THE CALMEST SET
+    for ins, positions in open_by_ins.items():
+      if (ins not in calmest):
+        self.close_positions(positions, date)
+
+    # OPEN WHATEVER'S CALMEST AND NOT ALREADY HELD
+    for ins in calmest:
+      if (ins in open_by_ins):
+        continue
+      cur_price = self.datafeed.get_price(ins, date, 'close')
+      stop_loss_level = cur_price * (1 - self.stop_loss_margin)
+      order = Order(ins, 'buy', 1, stop_loss_level, None, date)
+      self.submit_order(order)
+
+
 STRATEGY_REGISTRY = {
   'movavg': MovingAverageCrossoverStrategy,
   'trend': TrendFollowingStrategy,
   'meanreversion': MeanReversionStrategy,
   'dualmomentum': DualMomentumStrategy,
   'crosssectionalmomentum': CrossSectionalMomentumStrategy,
+  'lowvolatility': LowVolatilityStrategy,
 }
 
 DEFAULT_STRATEGY_NAME = 'movavg'
