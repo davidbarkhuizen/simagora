@@ -789,9 +789,8 @@ class TestStopLossSlippage(unittest.TestCase):
 
 class TestTightenStopLoss(unittest.TestCase):
   '''
-  Broker.tighten_stop_loss - the missing in-place stop_loss update
-  mechanism (see docs/engine-review.md), needed for chandelier-style
-  trailing stops
+  Broker.tighten_stop_loss - the in-place stop_loss update mechanism
+  needed for chandelier-style trailing stops
   '''
 
   def test_tightens_a_long_stop_upward(self):

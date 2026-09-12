@@ -144,12 +144,11 @@ class Account(HasAutoId):
     positions - positive for net long, negative for net short. Each
     `Order` always opens its own independent `Position`, even for the
     same instrument+direction already held (a deliberate lot-based
-    model, not an oversight - see docs/engine-review.md), so there's
-    normally no single place that already shows "how much am I net
-    long/short in X" without walking every open position and grouping
-    by instrument yourself; this does that once. An instrument whose
-    lots fully offset (net exactly zero) is omitted rather than
-    included with a zero value.
+    model, not an oversight), so there's normally no single place that
+    already shows "how much am I net long/short in X" without walking
+    every open position and grouping by instrument yourself; this does
+    that once. An instrument whose lots fully offset (net exactly
+    zero) is omitted rather than included with a zero value.
     '''
     by_instrument = {}
     for pos in self.broker.get_open_positions_for_trader(self.trader_id):
