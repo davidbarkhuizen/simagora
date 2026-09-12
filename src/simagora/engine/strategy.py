@@ -24,6 +24,10 @@ class BaseStrategy(object):
   def submit_order(self, order):
     self.trader.submit_order(order)
 
+  def open_positions(self):
+    '''this trader's own currently open positions, across every instrument it might hold'''
+    return self.trader.broker.get_open_positions_for_trader(self.trader.id)
+
   def log_self(self):
     '''log this strategy module's own source, line by line, for the run's audit trail'''
     with open(SOURCE_FILE_NAME, 'r') as f:
@@ -81,8 +85,7 @@ class MultiInstrumentStrategy(BaseStrategy):
     any position it returns False for (e.g. lambda o: o.buysell == 'buy')
     '''
     by_key = {}
-    open_positions = self.trader.broker.get_open_positions_for_trader(self.trader.id)
-    for pos in open_positions:
+    for pos in self.open_positions():
       order = pos.order_receipt.order
       if (filter_fn is not None) and (not filter_fn(order)):
         continue
@@ -114,8 +117,7 @@ class MovingAverageCrossoverStrategy(SingleInstrumentStrategy):
     the money (per today's tally in pos.history, already computed by
     Account.tally_individual_open_positions before the strategy runs)
     '''
-    open_positions = self.trader.broker.get_open_positions_for_trader(self.trader.id)
-    for pos in open_positions:
+    for pos in self.open_positions():
       order = pos.order_receipt.order
       if (order.ins != self.instrument) or (order.buysell != buysell):
         continue
@@ -181,8 +183,7 @@ class TrendFollowingStrategy(SingleInstrumentStrategy):
     that are in the opposite direction to a fresh breakout signal
     '''
     opposite = 'sell' if (new_buysell == 'buy') else 'buy'
-    open_positions = self.trader.broker.get_open_positions_for_trader(self.trader.id)
-    for pos in open_positions:
+    for pos in self.open_positions():
       order = pos.order_receipt.order
       if (order.ins != self.instrument) or (order.buysell != opposite):
         continue

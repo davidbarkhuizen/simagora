@@ -228,7 +228,10 @@ was handed.
 
 - **`BaseStrategy` is split by instrument shape.** `engine/strategy.py`'s
   `BaseStrategy` itself no longer knows about instruments at all — just the shared
-  trader/datafeed wiring, order submission, and `log_self()`. It's split into
+  trader/datafeed wiring, order submission, `open_positions()` (this trader's own
+  currently open positions, straight off `Broker.get_open_positions_for_trader()`
+  - every strategy that manages its own open positions calls this rather than
+  reaching into `self.trader.broker` directly), and `log_self()`. It's split into
   `SingleInstrumentStrategy` (sets `self.instrument = trader.instrument`) and
   `MultiInstrumentStrategy` (sets `self.universe = trader.universe`); the first
   three concrete strategies above all inherit from `SingleInstrumentStrategy`.
@@ -262,7 +265,7 @@ was handed.
   - not each strategy's own copy of it - lives once on the base class:
   `rank_universe(metric_fn)` ({instrument: metric_fn(instrument)}, dropping
   instruments `metric_fn` returns `None` for), `open_positions_by(key_fn,
-  filter_fn=None)` (this trader's own open positions grouped however the caller
+  filter_fn=None)` (groups `BaseStrategy.open_positions()` however the caller
   needs - by instrument, by `(instrument, buysell)`, optionally filtered), and
   `close_positions(positions, date)`. Each concrete strategy's `execute()` just
   supplies its own metric and grouping key.
