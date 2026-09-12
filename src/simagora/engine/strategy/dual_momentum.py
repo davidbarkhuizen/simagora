@@ -25,13 +25,13 @@ class DualMomentumStrategy(MultiInstrumentStrategy):
   stop_loss_margin = Decimal('0.05')  # 5 %
 
   def execute(self, date):
-    returns = self.rank_universe(
+    returns = self.rank_universe_or_none(
       lambda ins: self.datafeed.n_day_return(ins, date, 'close', self.lookback_window_days))
-    open_by_ins = self.open_positions_by(lambda o: o.ins, lambda o: o.buysell == 'buy')
-
-    if (len(returns) == 0):
+    if (returns is None):
       # not enough trailing history anywhere yet
       return
+
+    open_by_ins = self.open_positions_by(lambda o: o.ins, lambda o: o.buysell == 'buy')
 
     leader = max(returns, key=returns.get)
 
